@@ -90,11 +90,7 @@ Output:
 
 ### 2.5 Tool Executor
 
-Executor là code thường: nó chỉ gọi tool khi Verifier trả `ACCEPT`.
-
-- Validate lại schema args trước khi gọi, vì không nên tin output LLM hoàn toàn.
-- Bắt lỗi tool (timeout, lỗi API) và trả thông báo rõ ràng cho user.
-
+Dựa trên ToolEnv của Ban Tổ Chức
 ---
 
 ## 3. Vòng lặp REJECT
@@ -112,9 +108,3 @@ Planner ──plan──► Verifier ──REJECT + lý do──► Planner   (r
 ```
 
 ---
-
-## 4. Lưu ý khi triển khai
-
-- **Độ trễ:** pipeline có 3 lượt LLM nối tiếp (Mapper, Planner, Verifier), nên dùng Small LLM cho Mapper và cân nhắc model nhanh cho Verifier.
-- **Log từng bước:** lưu transcript thô, query chuẩn, plan, verdict để debug khi sai (sai do ASR, do Mapper hay do Planner).
-- **Sai từ ASR lan xuống dưới:** Mapper và Planner không sửa được từ ASR nhận sai hoàn toàn, nên đánh giá ASR riêng trên dữ liệu giọng vùng miền.

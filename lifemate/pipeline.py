@@ -444,6 +444,7 @@ def main():
     ap.add_argument("--eager", action="store_true", help="vLLM enforce_eager: skip CUDA graphs (slower, avoids capture errors)")
     ap.add_argument("--verify-rounds", type=int, default=VERIFY_ROUNDS)
     ap.add_argument("--text", action="store_true", help="use audio_text instead of ASR (train only)")
+    ap.add_argument("--ids", help="path to a text file with IDs to run (e.g. eval/splits/dev_ids.txt)")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args()
@@ -467,6 +468,9 @@ def main():
     catalog = {t["name"]: t for app in json.load(open(root / a.split / f"{a.split}_tools_catalog.json", encoding="utf-8"))["apps"]
                for t in app["tools"]}
     items = [json.loads(l) for l in open(root / a.split / f"{a.split}.jsonl", encoding="utf-8") if l.strip()]
+    if a.ids:
+        filter_ids = set(open(a.ids, encoding="utf-8").read().split())
+        items = [item for item in items if item["id"] in filter_ids]
     items = items[:a.limit] if a.limit else items
     t_start = time.time()
 

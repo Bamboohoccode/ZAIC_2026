@@ -8,3 +8,6 @@ data/
 *.gguf
 runs/
 submission*.jsonl
+
+# Bytecode Python
+__pycache__/

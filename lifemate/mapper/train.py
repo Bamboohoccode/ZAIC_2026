@@ -2,9 +2,9 @@
 
 pip install -U transformers peft datasets accelerate
 
-python train_mapper.py                          # ~3 epochs, saves ./mapper_lora
-python train_mapper.py --epochs 1 --limit 2000  # quick smoke test
-then: python pipeline.py ... --mapper-lora ./mapper_lora
+python -m lifemate.mapper.train                          # ~3 epochs, saves ./mapper_lora
+python -m lifemate.mapper.train --epochs 1 --limit 2000  # quick smoke test
+then: python -m lifemate.pipeline ... --mapper-lora ./mapper_lora
 
 Training uses pipeline.mapper_conv (same system prompt + shots + chat template, thinking off) so train and inference
 see identical prompts. Text is lowercased and stripped of punctuation because the mapper's input is raw ASR output.
@@ -17,7 +17,7 @@ from datasets import load_dataset
 from peft import LoraConfig, get_peft_model
 from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
 
-from pipeline import MAPPER_MODEL, mapper_conv
+from lifemate.pipeline import MAPPER_MODEL, mapper_conv
 
 
 def norm(s):
@@ -113,7 +113,7 @@ def main():
                              remove_unused_columns=False, group_by_length=False)
     Trainer(model=model, args=args, train_dataset=tr, eval_dataset=dv, data_collator=collate(tok)).train()
 
-    model.save_pretrained(a.out)  # adapter_config.json + adapter weights, loaded by pipeline.py --mapper-lora
+    model.save_pretrained(a.out)  # adapter_config.json + adapter weights, loaded by lifemate/pipeline.py --mapper-lora
     print("saved ->", a.out)
     if a.eval:
         evaluate(model, tok, test)

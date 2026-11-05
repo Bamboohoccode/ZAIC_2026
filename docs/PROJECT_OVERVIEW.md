@@ -2,11 +2,6 @@
 
 Cập nhật 05/11/2026. Nguồn pipeline: `PIPELINE.md` (plan cũ) và `New_plan.md` (plan mới).
 
-> **Giả định trong tài liệu này (cần xác nhận, xem mục 9)**
-> a. Luật LifeMate lấy từ hai repo tóm tắt của thí sinh khác (lenamkhanhh/ZaloAIC, Nguyen-Le-Tuan/ZAIC_2026), chưa đọc được portal chính thức. Mốc thời gian lấy từ challenge.zalo.ai và PDF thể lệ, đã xác nhận.
-> b. Ngân sách tham số: PhoWhisper-large + Qwen ≤4B + Laya-multilingual. Verifier dùng Laya (không dùng Jev).
-> c. Tên lead là Tiến theo tên project ClickUp, sửa nếu sai.
-
 ---
 
 ## 1. Dự án là gì
@@ -100,10 +95,10 @@ flowchart TD
     V1 -- hợp lệ --> V2["Verifier [Hà]<br/>Laya-multilingual 322M (PyTorch hoặc ONNX Runtime)<br/>ACCEPT | REJECT | ASK + confidence"]
     V2 -- "REJECT (≤N lần), lý do từ diff bằng code" --> D
     V2 -- ASK --> Q
-    V2 -- ACCEPT --> F["Executor [Tiến]<br/>zaic_tools, một ToolEnv mỗi mẫu"]
+    V2 -- ACCEPT --> F["Executor [Tiên]<br/>zaic_tools, một ToolEnv mỗi mẫu"]
     F -- "lỗi tool" --> D
     F --> Res["tool_calls + state_hash<br/>submission.jsonl"]
-    W["Weight-space programming [Tiến]<br/>model mạnh sửa trọng số Qwen 4B<br/>(thí nghiệm, có điều kiện dừng)"] -. "nếu go" .-> D
+    W["Weight-space programming [Tiên]<br/>model mạnh sửa trọng số Qwen 4B<br/>(thí nghiệm, có điều kiện dừng)"] -. "nếu go" .-> D
     E["Eval harness [Kiệt]<br/>scorer cục bộ, log từng tầng, pass^k"] -. "chấm mọi tầng" .-> Res
 ```
 
@@ -119,12 +114,13 @@ Cột công nghệ là đề xuất khởi điểm, người phụ trách đư�
 | 5 | Planner | Vương | Query chuẩn, state, danh sách tool | `Plan` (3 nhánh `action`) | Qwen 4B không vision encoder, chạy bằng engine suy luận chọn sau khi đo (HF `transformers` hoặc vLLM, chọn theo tốc độ trên A30 và tính offline). Structured output theo schema ToolEnv bằng thư viện constrained decoding (Outlines, xgrammar hoặc guided decoding của vLLM, chọn khi làm). Greedy, seed cố định. Suy luận tự do rồi mới ép JSON cuối | Suy luận |
 | 6 | Schema validator | Vương | `Plan` | Hợp lệ hoặc lỗi cụ thể | Python: `jsonschema` hoặc pydantic, đọc schema từ `zaic_tools`. Kiểm tool tồn tại, tham số bắt buộc, kiểu, enum. Thiếu tham số thì đổi sang `ask_user` | Suy luận |
 | 7 | Verifier | Hà | Query chuẩn, action đã lưu trong state, `Plan` (chuỗi hoá gọn) | `Verdict`: ACCEPT, REJECT hoặc ASK + confidence | Laya-multilingual 322M (Convai Innovations, Apache 2.0, nền mmBERT-base). Câu hỏi dạng choice. Fine-tune bằng PyTorch trên dữ liệu sinh từ train. Chạy PyTorch hoặc ONNX Runtime. Lý do REJECT do hàm diff bằng Python sinh ra | Fine-tune (phát triển), suy luận (offline) |
-| 8 | Executor | Tiến | `Plan` đã ACCEPT | Kết quả tool, `state_hash` | `zaic_tools` do BTC cung cấp. Một ToolEnv mỗi mẫu, ghi lại mọi call đã gọi để đưa vào submission | Suy luận |
-| 9 | Pipeline và Docker | Tiến | Thư mục mẫu | `submission.jsonl` | Python glue (`pipeline.py`). Docker base có CUDA, cài sẵn trọng số, chạy offline, seed cố định, giới hạn thời gian mỗi mẫu | Suy luận |
+| 8 | Executor | Tiên | `Plan` đã ACCEPT | Kết quả tool, `state_hash` | `zaic_tools` do BTC cung cấp. Một ToolEnv mỗi mẫu, ghi lại mọi call đã gọi để đưa vào submission | Suy luận |
+| 9 | Pipeline và Docker | Tiên | Thư mục mẫu | `submission.jsonl` | Python glue (`pipeline.py`). Docker base có CUDA, cài sẵn trọng số, chạy offline, seed cố định, giới hạn thời gian mỗi mẫu | Suy luận |
 | 10 | Eval harness | Kiệt | Đầu ra mọi tầng | Điểm cục bộ, lỗi theo tầng, pass^k | Python (`eval/scorer.py`): công thức BTC (hash sai thì 0, đúng thì F1, fuzzy token-F1 > 0,6), chia train theo app | Phát triển |
 | 11 | Dữ liệu synthetic | Kiệt | Catalog, `zaic_tools` | Bộ test 3 nhãn (đủ, thiếu slot, không có app) | Python, sinh từ catalog public test bằng cách xoá một tham số hoặc xoá tool phù hợp. LLM ngoài chỉ dùng lúc phát triển nếu BTC xác nhận | Phát triển |
-| 12 | Tối ưu prompt | Kiệt, Vương | Metric có phản hồi text, tập train và val chia theo app | Prompt Planner và Mapper | GEPA (`pip install gepa` hoặc `dspy.GEPA`). LLM phản tư là model mạnh, chỉ lúc phát triển. Bắt đầu `auto="light"` | Phát triển |
-| 13 | Weight-space programming | Tiến | Qwen 4B, log lỗi, dữ liệu practice | Trọng số Qwen đã sửa hoặc kết luận "bỏ" | Python kernel với PyTorch, model mạnh đọc và sửa tensor trọng số, ngân sách forward pass cố định (blog dùng 50). Theo [RikiyaT](https://rikiyat.github.io/blog/weight-space-programming/) | Phát triển |
+| 12 | Tối ưu prompt | Kiệt, Vương (cùng một module, làm độc lập) | Metric có phản hồi text, tập train và val chia theo app (dùng chung cho cả hai) | Hai bản prompt Planner và Mapper: một của Kiệt, một của Vương | GEPA (`pip install gepa` hoặc `dspy.GEPA`). LLM phản tư là model mạnh, chỉ lúc phát triển. Bắt đầu `auto="light"`. Mỗi người tự chọn cấu hình, seed và hướng tối ưu | Phát triển |
+| 13 | Weight-space programming | Tiên | Qwen 4B, log lỗi, dữ liệu practice | Trọng số Qwen đã sửa hoặc kết luận "bỏ" | Python kernel với PyTorch, model mạnh đọc và sửa tensor trọng số, ngân sách forward pass cố định (blog dùng 50). Theo [RikiyaT](https://rikiyat.github.io/blog/weight-space-programming/) | Phát triển |
+| 14 | Ensemble prompt | Kiệt, Vương (làm chung) | Hai bản prompt đã tối ưu xong | Một cấu hình ensemble đã chốt, hoặc kết luận "giữ bản tốt hơn" | Chỉ làm sau khi cả hai xong. Ứng viên: chạy cả hai prompt rồi chọn plan khớp nhau, dùng Verifier làm trọng tài khi lệch, hoặc đưa cả hai vào một lượt GEPA merge. Phải đo độ trễ vì tốn thêm một lượt gọi Qwen. Chốt cách ghép sau khi có số đo | Phát triển, suy luận (offline) nếu giữ |
 
 Các quy ước chung của cả pipeline:
 a. Mọi bước đều đi qua `contracts.py` (mục 4) và ghi log theo mẫu.
@@ -151,25 +147,7 @@ d. Laya chỉ trả nhãn và xác suất, không giải thích. Lý do REJECT g
 
 ---
 
-## 3. Cấu trúc repo
-
-### 3.0 Hiện tại (đối chiếu ngày 05/11/2026)
-
-Repo `ZAIC_2026` (nhánh `main`, remote `origin` = github.com/Bamboohoccode/ZAIC_2026):
-
-```
-ZAIC_2026/
-├── README.md                    # giới thiệu ngắn, trỏ về tài liệu này
-├── Overview_PJ.md               # file này (tổng quan, kiến trúc, cấu trúc repo)
-├── .gitignore                   # chặn data/ và trọng số
-└── data/                        # KHÔNG commit (luật cấm phát tán), hiện có train+public_test.zip
-```
-
-Ghi chú trạng thái:
-a. `PIPELINE.md` và `pipeline.png` đang được theo dõi bởi git nhưng đã bị xoá khỏi working tree. Nội dung plan cũ vẫn xem được trong lịch sử commit (`693585c`). Chưa quyết định khôi phục hay xoá hẳn.
-b. Chưa có code, chưa có thư mục `docs/`, `lifemate/`, `eval/`... Các thư mục trong mục 3.1 là kế hoạch, sẽ tạo khi module bắt đầu.
-
-### 3.1 Đề xuất (kế hoạch, chưa tạo)
+## 3. Cấu trúc repo đề xuất
 
 ```
 zaic2026-lifemate/
@@ -192,39 +170,114 @@ zaic2026-lifemate/
 │   ├── planner/                 # [Vương] prompt, structured output, vòng lặp
 │   ├── validator/               # [Vương] schema validator bằng code
 │   ├── verifier/                # [Hà] Laya: data, fine-tune, suy luận, diff
-│   ├── executor/                # [Tiến] bọc zaic_tools, quản lý ToolEnv
-│   └── pipeline.py              # [Tiến] ghép toàn bộ, chạy một mẫu
+│   ├── executor/                # [Tiên] bọc zaic_tools, quản lý ToolEnv
+│   └── pipeline.py              # [Tiên] ghép toàn bộ, chạy một mẫu
 ├── prompts/                     # prompt đã chốt, mỗi file có version + điểm
-│   └── gepa/                    # [Kiệt, Vương] kết quả tối ưu
+│   └── gepa/                    # [Kiệt, Vương] kiet/ và vuong/: prompt của từng người; ensemble/: bản ghép chung
 ├── optimize/
-│   ├── gepa/                    # [Kiệt, Vương] script GEPA, metric, feedback
-│   └── wsp/                     # [Tiến] thí nghiệm weight-space programming
+│   ├── gepa/                    # [Kiệt, Vương] cùng một module: metric/ dùng chung, kiet/ và vuong/ chạy độc lập, ensemble/ ghép hai prompt
+│   └── wsp/                     # [Tiên] thí nghiệm weight-space programming
 ├── eval/                        # [Kiệt] harness: scorer cục bộ, log từng tầng, pass^k
 │   ├── scorer.py
 │   ├── run_eval.py
 │   └── splits/                  # chia theo app, không theo mẫu
 ├── synth/                       # [Kiệt] sinh dữ liệu 3 nhãn (đủ, thiếu slot, không có app)
-├── docker/                      # [Tiến] Dockerfile, script suy luận, kiểm tra offline
+├── docker/                      # [Tiên] Dockerfile, script suy luận, kiểm tra offline
+├── task_flow/                   # [mọi người] mỗi người một file <tên>.md: luồng làm việc + note tiến độ (mục 3.2)
 ├── scripts/                     # count_params.py, bench_latency.py
 └── tests/
 ```
 
 Quy ước: mỗi module có `README.md` ngắn (vào, ra, cách chạy, điểm hiện tại) và đi theo `contracts.py`. Không import chéo giữa các module, chỉ qua `contracts.py`. Mọi kết quả đo ghi vào `docs/DECISIONS.md`.
 
-### 3.1 Quy ước nhánh
-Tên nhánh: `<loại>/<module>-<tên>`, chữ thường, không dấu. Loại: `feat` (module, tính năng), `exp` (thí nghiệm có thể bỏ), `fix` (sửa lỗi), `docs`. Commit: `[module] động từ: nội dung`. Tag: `freeze-15-11`, `submit-docker-16-11`.
+### 3.1 Quy ước nhánh: mỗi người một nhánh, mỗi nhánh chứa module của người đó
+Tên nhánh: `<module>/<tên>`, chữ thường, không dấu. Mỗi người đúng một nhánh dài hạn, tách từ `main`, chỉ chứa và chỉ sửa các module được giao. Commit: `[module] động từ: nội dung`. Tag: `freeze-15-11`, `submit-docker-16-11`.
 
-| Người | Nhánh | Thư mục được sửa |
+| Người | Nhánh | Module trong nhánh |
 |---|---|---|
-| Tiến | `feat/pipeline-tien`, `feat/docker-tien`, `exp/wsp-tien` | `lifemate/pipeline.py`, `executor/`, `contracts.py`, `docker/`, `optimize/wsp/`, `configs/`, `scripts/` |
-| Khánh | `feat/asr-khanh`, `feat/mapper-khanh` | `lifemate/asr/`, `lifemate/mapper/` |
-| Hà | `feat/verifier-ha` | `lifemate/verifier/` |
-| Kiệt | `feat/eval-kiet`, `feat/synth-kiet`, `exp/gepa-kiet` | `eval/`, `synth/`, `optimize/gepa/` (metric) |
-| Vương | `feat/planner-vuong`, `feat/state-vuong`, `feat/validator-vuong`, `exp/gepa-vuong` | `lifemate/planner/`, `state/`, `validator/`, `prompts/gepa/`, `optimize/gepa/` (chạy) |
+| Tiên | `integration/tien` | `lifemate/pipeline.py`, `lifemate/executor/`, `lifemate/contracts.py`, `docker/`, `optimize/wsp/`, `configs/`, `scripts/` |
+| Khánh | `asr-mapper/khanh` | `lifemate/asr/`, `lifemate/mapper/` |
+| Hà | `verifier/ha` | `lifemate/verifier/` |
+| Kiệt | `gepa/kiet` | `eval/`, `synth/`, `optimize/gepa/metric/`, `optimize/gepa/kiet/`, `prompts/gepa/kiet/` |
+| Vương | `gepa/vuong` | `lifemate/planner/`, `lifemate/state/`, `lifemate/validator/`, `optimize/gepa/vuong/`, `prompts/gepa/vuong/` |
 
-Gộp vào `main`: PR nhỏ, một người review, mô tả PR ghi điểm từ `eval/run_eval.py` (tập giữ lại chia theo app), không commit `data/` hay trọng số, đổi model hoặc prompt thì ghi `docs/DECISIONS.md`. Từ 15/11 chỉ nhận PR sửa lỗi, sau tag `freeze-15-11` không đổi model. Chỉ sửa thư mục của mình, muốn sửa `contracts.py` hoặc `configs/` phải báo cả nhóm.
+Cây thư mục trong nhánh của từng người (chỉ phần của họ, phần còn lại giữ nguyên như `main`):
 
-Khuôn một module (ví dụ Hà): `lifemate/verifier/` gồm `README.md`, `data.py` (sinh dữ liệu), `train.py` (fine-tune Laya), `infer.py` (trả `Verdict`), `diff.py` (lý do REJECT bằng code), `tests/`. Module khác theo cùng khuôn.
+```
+integration/tien
+├── lifemate/
+│   ├── contracts.py
+│   ├── pipeline.py
+│   └── executor/        README.md, env.py, tests/
+├── optimize/wsp/        README.md, edit_weights.py, eval_wsp.py
+├── docker/              Dockerfile, run_inference.sh, check_offline.sh
+├── configs/             budget.yaml, pipeline.yaml
+└── scripts/             count_params.py, bench_latency.py
+
+asr-mapper/khanh
+└── lifemate/
+    ├── asr/             README.md, transcribe.py, nbest.py, bench.py, tests/
+    └── mapper/          README.md, prompt.py, entities.py, guard.py, tests/
+
+verifier/ha
+└── lifemate/verifier/   README.md, data.py, train.py, infer.py, diff.py, tests/
+
+gepa/kiet
+├── eval/                scorer.py, run_eval.py, splits/
+├── synth/               README.md, gen_three_labels.py, tests/
+├── optimize/gepa/
+│   ├── metric/          metric.py, feedback.py   (dùng chung, Vương cũng import)
+│   └── kiet/            run_gepa.py, config.yaml
+└── prompts/gepa/kiet/   planner_vN.txt, mapper_vN.txt (kèm điểm)
+
+gepa/vuong
+├── lifemate/
+│   ├── planner/         README.md, prompt.py, structured.py, loop.py, tests/
+│   ├── state/           README.md, state.py, history.py, tests/
+│   └── validator/       README.md, validate.py, schema.py, tests/
+├── optimize/gepa/vuong/ run_gepa.py, config.yaml
+└── prompts/gepa/vuong/  planner_vN.txt, mapper_vN.txt (kèm điểm)
+
+Sau khi cả hai xong: PR chung vào main thêm optimize/gepa/ensemble/ và prompts/gepa/ensemble/ (mục 5.6)
+```
+
+Quy tắc:
+a. Mỗi module có `README.md` ngắn (vào, ra, cách chạy, điểm hiện tại), mã chính và `tests/`. Giao tiếp giữa module chỉ qua `lifemate/contracts.py`.
+b. Không sửa module của người khác. Cần sửa `contracts.py` hoặc `configs/` thì báo Tiên và cả nhóm.
+c. Thí nghiệm lớn có thể tách nhánh con tạm `<nhánh của mình>-exp`, xong thì gộp lại nhánh của mình hoặc xoá.
+d. Gộp vào `main` bằng PR: PR nhỏ, một người review, mô tả PR ghi điểm từ `eval/run_eval.py` (tập giữ lại chia theo app), không commit `data/` hay trọng số. Đổi model hoặc prompt thì ghi `docs/DECISIONS.md`.
+e. Từ 15/11 chỉ nhận PR sửa lỗi, sau tag `freeze-15-11` không đổi model.
+f. Cập nhật nhánh của mình từ `main` mỗi ngày để tránh lệch hợp đồng dữ liệu.
+g. Ngoại lệ duy nhất được commit thẳng lên `main` không qua PR: file `task_flow/<tên>.md` của chính mình (mục 3.2).
+h. Kiệt và Vương cùng làm **một module GEPA** nhưng mỗi người một nhánh, một thư mục kết quả riêng (`optimize/gepa/<tên>/`, `prompts/gepa/<tên>/`) và chạy độc lập. Hai người không sửa thư mục của nhau. Thư mục `ensemble/` chỉ tạo sau khi cả hai xong (mục 5.6).
+
+### 3.2 Quy trình `task_flow/`: khai báo luồng, ghi note, tick ClickUp
+Mỗi người nhận một task lớn trên ClickUp (list `Task_16/11`), tương ứng mục 5. Cách chia nhỏ việc do từng người tự nghiên cứu và tự quyết định. Để cả nhóm theo dõi được, mỗi người làm theo ba bước:
+
+a. **Khi bắt đầu:** tạo file `task_flow/<tên>.md` ở nhánh `main` (tên file không dấu: `tien.md`, `khanh.md`, `ha.md`, `kiet.md`, `vuong.md`). Ghi rõ luồng mình sẽ làm: mục tiêu, các bước dự định theo thứ tự, thứ cần đo, dự phòng nếu bước đó không ra.
+b. **Tạo một task mới tên "Start luồng" trên ClickUp** (danh sách `Task_16/11`, tiêu đề `[<tên>] Start luồng`, gán cho chính mình). Mỗi bước trong luồng là một subtask của task này, tên subtask khớp tên bước trong file `.md`. **Không thao tác trên task lớn đã được giao** (không thêm subtask, không tick, không đổi trạng thái ở đó, trừ khi hoàn thành mục tiêu lớn).
+c. **Trong lúc làm:** cập nhật note vào file `task_flow/<tên>.md` trên `main` và tick subtask trong task "Start luồng" **cùng lúc**, ít nhất một lần mỗi ngày. Đổi luồng thì sửa cả file `.md` lẫn subtask của task "Start luồng". Việc nào xong ghi kết quả đo (điểm, độ trễ) ngay trong file.
+
+Chỉ sửa file của chính mình trong `task_flow/`, để không bị xung đột khi commit thẳng lên `main`.
+
+Mẫu file:
+
+```markdown
+# Task flow: <tên> (nhánh <module>/<tên>)
+
+## Mục tiêu
+<một hai câu, lấy từ mục 5>
+
+## Luồng dự định
+1. <bước 1>  [ ] ClickUp subtask: <tên subtask trong task "Start luồng">
+2. <bước 2>  [ ] ClickUp subtask: <tên subtask trong task "Start luồng">
+
+## Note tiến độ (mới nhất ở trên)
+- dd/mm: <đã làm gì, kết quả đo, vướng gì>
+
+## Quyết định và điểm đo
+- <đổi gì, điểm trước và sau, độ trễ>  (ghi thêm vào docs/DECISIONS.md nếu đổi model hoặc prompt)
+```
 
 ---
 
@@ -250,13 +303,14 @@ c. Mọi module ghi log đầu vào và đầu ra theo mẫu vào `runs/<run_id>
 
 | Module | Người | Mục tiêu | Sản phẩm | Điều kiện xong |
 |---|---|---|---|---|
-| Integration, executor, Docker, WSP | **Tiến** | Chạy end to end offline trong 30 giây. Thử làm Planner thông minh hơn bằng sửa trọng số | `pipeline.py`, Docker, báo cáo WSP | Docker chạy offline trên mẫu mẫu, đếm tham số dưới 6B |
+| Integration, executor, Docker, WSP | **Tiên** | Chạy end to end offline trong 30 giây. Thử làm Planner thông minh hơn bằng sửa trọng số | `pipeline.py`, Docker, báo cáo WSP | Docker chạy offline trên mẫu mẫu, đếm tham số dưới 6B |
 | ASR + Mapper | **Khánh** | Giảm lỗi thực thể và độ trễ ASR | Bảng WER, n-best, mapper + entity guard | Có bảng WER theo giọng và lỗi thực thể, ASR cả hội thoại dưới ngân sách thời gian |
 | Verifier | **Hà** | Verifier dưới 0,4B, nhanh, ít bỏ sót | Laya fine-tune + ngưỡng + diff | Điểm cuối không thấp hơn khi không có Verifier, thêm dưới 100 ms mỗi mẫu |
-| Eval harness + synthetic data + GEPA metric | **Kiệt** | Đo được mọi thay đổi, tối ưu prompt có phương pháp | `eval/`, `synth/`, metric GEPA | Scorer cục bộ khớp công thức BTC, log từng tầng, chia theo app |
-| Planner, state, validator + GEPA | **Vương** | Planner 3 nhánh đúng, ít lỗi cấu trúc | `planner/`, `state/`, `validator/`, prompt tối ưu | F1 từng nhãn ổn, tỉ lệ plan lỗi cấu trúc gần 0 |
+| GEPA (bản của Kiệt) + nền đo: eval, synthetic, metric | **Kiệt** | Một bản prompt tối ưu bằng GEPA, độc lập với Vương. Đồng thời dựng nền đo dùng chung | `eval/`, `synth/`, metric GEPA, `prompts/gepa/kiet/` | Scorer cục bộ khớp công thức BTC, prompt của Kiệt có điểm giữ lại cao hơn baseline |
+| GEPA (bản của Vương) + nền Planner: planner, state, validator | **Vương** | Một bản prompt tối ưu bằng GEPA, độc lập với Kiệt. Đồng thời dựng Planner nền | `planner/`, `state/`, `validator/`, `prompts/gepa/vuong/` | F1 từng nhãn ổn, plan lỗi cấu trúc gần 0, prompt của Vương có điểm giữ lại cao hơn baseline |
+| Ensemble hai prompt GEPA | **Kiệt và Vương** | Ghép hai bản prompt nếu đo thấy tốt hơn bản đơn | `optimize/gepa/ensemble/`, `prompts/gepa/ensemble/` | Điểm giữ lại ensemble hơn bản đơn tốt nhất, độ trễ còn trong ngân sách 30 giây |
 
-### 5.1 Tiến: tích hợp và weight-space programming
+### 5.1 Tiên: tích hợp và weight-space programming
 Ý tưởng ([RikiyaT, Weight-Space Programming](https://rikiyat.github.io/blog/weight-space-programming/)): một model mạnh đọc và sửa trực tiếp trọng số của model nhỏ, không dùng gradient. Thí nghiệm trong blog sửa Qwen3.5-0.8B, chạm 0,016% trọng số, nâng MATH-500 từ 7,9% lên 48,1% nhờ loại bỏ vòng lặp suy luận.
 
 a. **Việc tích hợp (ưu tiên 1):** `pipeline.py` + `executor/` + `docker/`. Chạy được end to end trước 09/11.
@@ -290,22 +344,26 @@ b. Chia train theo app (train 80 phần trăm app, giữ 20 phần trăm app l�
 c. Log từng tầng, báo cáo lỗi theo tầng: ASR, Mapper, Planner, Validator, Verifier.
 d. Chạy mỗi mẫu k lần để đo pass^k (độ ổn định).
 e. `synth/`: sinh bộ test 3 nhãn (đủ thông tin, thiếu slot, không có app) từ catalog của public test (luật cho phép dùng catalog và `zaic_tools` để sinh dữ liệu). Không gán nhãn cho audio hay request của test.
-f. **Metric GEPA:** hàm trả điểm kèm text phản hồi (diff call sai, call thừa, nhầm ask với `[]`, lỗi hash) để LLM phản tư đọc được.
+f. **Metric GEPA:** hàm trả điểm kèm text phản hồi (diff call sai, call thừa, nhầm ask với `[]`, lỗi hash) để LLM phản tư đọc được. Metric và chia train, val theo app là **dùng chung** cho Kiệt và Vương, để hai bản prompt so sánh được với nhau.
+g. **GEPA của riêng Kiệt:** chạy độc lập với Vương trên cùng module (prompt Planner và Mapper), kết quả vào `prompts/gepa/kiet/`.
 
 ### 5.5 Vương: Planner, state, validator, GEPA
 a. Baseline Planner (Qwen ≤4B instruct): JSON có `action`, structured output, cho suy luận trước rồi mới ép schema.
 b. `state/`: lịch sử lượt, slot đã biết, ngày giờ hiện tại, action đã gọi.
 c. `validator/`: tool tồn tại, đủ tham số bắt buộc, đúng kiểu và enum. Lỗi trả về Planner kèm thông báo cụ thể. Thiếu tham số thì chuyển sang `ask_user`, không bịa.
 d. Giữ Planner dưới 16.384 token kể cả lịch sử. Có chiến lược cắt lịch sử.
-e. Cùng Kiệt chạy GEPA ([dspy.GEPA](https://dspy.ai/api/optimizers/GEPA) hoặc gói `gepa`) trên prompt Planner và Mapper.
+e. **GEPA của riêng Vương:** chạy ([dspy.GEPA](https://dspy.ai/api/optimizers/GEPA) hoặc gói `gepa`) trên prompt Planner và Mapper, độc lập với Kiệt, dùng metric chung của Kiệt. Kết quả vào `prompts/gepa/vuong/`.
 
-### 5.6 GEPA (Kiệt và Vương)
+### 5.6 GEPA (Kiệt và Vương cùng làm một module, độc lập rồi ensemble)
+Hai người **cùng làm một module**: tối ưu prompt Planner và Mapper bằng GEPA. Mỗi người chạy riêng, ra một bản prompt riêng. Sau khi cả hai xong thì ensemble hai bản đó. Không chia module thành hai phần.
 GEPA (Agrawal và cộng sự, ICLR 2026) tiến hoá prompt: LLM đọc toàn bộ trace thất bại, đề xuất sửa, giữ một frontier Pareto các ứng viên. Bài báo báo cáo vượt GRPO với ít rollout hơn nhiều (đo trên benchmark của họ, chưa đo trên LifeMate).
 a. Đối tượng tối ưu: prompt Planner, prompt Mapper, quy tắc `ask_user` và `cannot_answer`.
 b. LLM phản tư (reflection LM) có thể là model mạnh vì chỉ chạy lúc phát triển, prompt kết quả là text. **Cần BTC xác nhận mục 9.**
 c. Bắt đầu bằng `auto="light"`. Tập train và val chia theo app.
 d. Theo dõi riêng điểm trên nhóm đủ thông tin để GEPA không tối ưu thành "hỏi lại cho an toàn".
 e. Chỉ nhận prompt mới khi điểm giữ lại tăng so với baseline.
+f. **Để hai bản độc lập và so sánh được:** dùng chung metric, chung baseline, chung cách chia train và val theo app, chung tập giữ lại. Khác nhau ở cấu hình GEPA, seed, prompt khởi đầu hoặc LLM phản tư do mỗi người tự chọn. Không xem prompt của nhau trước khi cả hai chốt.
+g. **Ensemble (sau khi cả hai xong, dự kiến 13 đến 14/11):** làm chung, thư mục `optimize/gepa/ensemble/`, PR chung vào `main`. Cách ghép chốt theo số đo. Ứng viên: (1) chạy cả hai prompt rồi chọn plan khớp nhau, lệch thì để Verifier phân xử; (2) đưa cả hai vào một vòng GEPA merge; (3) giữ bản đơn tốt hơn nếu ensemble không hơn rõ. Ensemble tốn thêm một lượt gọi Qwen mỗi mẫu, nên phải đo độ trễ so với trần 30 giây.
 
 ---
 
@@ -316,7 +374,7 @@ e. Chỉ nhận prompt mới khi điểm giữ lại tăng so với baseline.
 | M0 | 07/11 | Đọc luật, dựng skeleton repo, giải nén dữ liệu, `scorer.py` chạy được, Hà báo smoke-test Laya, đếm tham số thật |
 | M1 | 09/11 | Mỗi module có bản v1, `pipeline.py` chạy end to end, điểm baseline cục bộ |
 | M2 | 12/11 | Xong các ablation (Mapper, Verifier, n-best). Chốt giữ hay bỏ từng thành phần |
-| M3 | 13 đến 14/11 | GEPA chốt prompt. WSP go/no-go. Laya đã fine-tune. Chọn ngưỡng |
+| M3 | 13 đến 14/11 | Kiệt và Vương mỗi người chốt prompt GEPA của mình rồi ensemble. WSP go/no-go. Laya đã fine-tune. Chọn ngưỡng |
 | M4 | 15/11 | Đóng băng. Build Docker, chạy offline, đo thời gian. Nộp sớm trong ngày |
 | Hạn | 16/11 23:59 | Nộp Docker, kèm tài liệu nguồn gốc và giấy phép model |
 | Đệm | 17 đến 19/11 | Sửa lỗi, kiểm tra hồ sơ. Không thay model sau khi mở private test |
@@ -344,8 +402,8 @@ Mỗi người có thể nộp thử public test 5 lần mỗi ngày: dành 1 l�
 ---
 
 ## 8. Quy trình làm việc
-a. Nhánh và PR theo quy ước mục 3.1 (ví dụ `feat/asr-khanh`, `feat/verifier-ha`), PR nhỏ, một người review.
-b. Họp 15 phút mỗi ngày: hôm qua xong gì, hôm nay làm gì, đang vướng gì.
+a. Mỗi người một nhánh theo mục 3.1 (`integration/tien`, `asr-mapper/khanh`, `verifier/ha`, `gepa/kiet`, `gepa/vuong`), PR nhỏ vào `main`, một người review.
+b. Họp 15 phút mỗi ngày: hôm qua xong gì, hôm nay làm gì, đang vướng gì. Mỗi người đã cập nhật `task_flow/<tên>.md` và tick subtask trong task "Start luồng" trước buổi họp (mục 3.2).
 c. Mọi con số báo cáo dùng điểm của `eval/scorer.py` trên tập giữ lại chia theo app.
 d. Mọi thay đổi model hay prompt kèm một dòng trong `docs/DECISIONS.md`: thay gì, điểm trước và sau, độ trễ.
 

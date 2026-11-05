@@ -1,5 +1,5 @@
-"""python test_pipeline.py                                             # unit asserts, no GPU
-python test_pipeline.py --root DATA --split train --sub submission.jsonl   # score vs train labels (RULES §7)
+"""python -m tests.test_pipeline                                             # unit asserts, no GPU
+python -m tests.test_pipeline --root DATA --split train --sub submission.jsonl   # score vs train labels (RULES §7)
 """
 import argparse
 import json
@@ -7,7 +7,9 @@ import sys
 import unicodedata
 from pathlib import Path
 
-from pipeline import date_table, time_hints, parse_calls, parse_verdict, run_agent, unseen_ids
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # gốc repo, để import lifemate khi chạy trực tiếp
+
+from lifemate.pipeline import date_table, time_hints, parse_calls, parse_verdict, run_agent, unseen_ids
 
 
 def unit():

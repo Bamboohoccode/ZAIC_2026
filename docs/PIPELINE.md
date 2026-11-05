@@ -12,7 +12,7 @@ flowchart TD
     D -->|plan + query| E[LLM Verifier]
     E -- ACCEPT --> F[Tool Executor]
     E -- "REJECT + lý do (≤ N lần)" --> D
-    E -. "quá N lần: chạy plan cuối" .-> F
+    E -. "quá N lần" .-> U[Hỏi lại user]
     F --> G[Result]
 ```
 
@@ -98,13 +98,13 @@ Dựa trên ToolEnv của Ban Tổ Chức
 Sau khi Verifier REJECT, plan quay về Planner kèm lý do, **tối đa N lần** (gợi ý N = 2–3).
 
 - Không giới hạn số vòng thì Planner và Verifier có thể lặp mãi, tốn token và tăng độ trễ.
-- Quá N lần thì **plan cuối cùng được chạy luôn, không kiểm tra nữa** (code: `plan_step` trong `pipeline.py`).
+- Quá N lần thì dừng lại và **hỏi lại user** (thường do query mơ hồ hoặc thiếu thông tin).
 
 ```
 Planner ──plan──► Verifier ──REJECT + lý do──► Planner   (retry ≤ N)
                      │
                      ├── ACCEPT ──► Tool Executor
-                     └── quá N lần ──► Tool Executor (plan cuối, không kiểm tra)
+                     └── quá N lần ──► hỏi lại user
 ```
 
 ---

@@ -1,0 +1,5 @@
+# Model, số tham số, giới hạn thời gian. Thêm model thì cập nhật file này và chạy scripts/count_params.py.
+total_params_limit_b: 6.0
+llm_params_limit_b: 5.0
+per_sample_time_limit_s: 30
+models: []

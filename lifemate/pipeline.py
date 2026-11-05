@@ -2,10 +2,10 @@
 
 pip install -U vllm chunkformer
 
-python pipeline.py --root DATA --split public_test                                   # full pipeline, 1 GPU
-python pipeline.py --root DATA --split train --text --limit 100                      # skip ASR, use audio_text
-python pipeline.py --root DATA --split public_test --asr-ckpt ft/asr.pt --llm ./llm_ft --mapper-lora ./mapper_lora
-python pipeline.py --root DATA --split train --text --llm gold --mapper none --limit 50   # replay labels, no GPU
+python -m lifemate.pipeline --root DATA --split public_test                                   # full pipeline, 1 GPU
+python -m lifemate.pipeline --root DATA --split train --text --limit 100                      # skip ASR, use audio_text
+python -m lifemate.pipeline --root DATA --split public_test --asr-ckpt ft/asr.pt --llm ./llm_ft --mapper-lora ./mapper_lora
+python -m lifemate.pipeline --root DATA --split train --text --llm gold --mapper none --limit 50   # replay labels, no GPU
 """
 import argparse
 import gc
@@ -305,7 +305,7 @@ def load_itn(folder_path, device="cpu"):
     import torch
     from safetensors.torch import load_file
     from transformers import GenerationConfig
-    itn_dir = str(Path(__file__).resolve().parent / "ITN")
+    itn_dir = str(Path(__file__).resolve().parents[2] / "ITN")  # ITN/ ở gốc repo
     sys.path.insert(0, itn_dir)  # ITN modules import each other as top-level names (model, model_config)
     cwd = os.getcwd()
     try:

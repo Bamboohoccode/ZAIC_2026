@@ -1,0 +1,4 @@
+# Ngưỡng, số lần retry, seed.
+seed: 0
+verify_rounds: 2
+max_ctx: 16384

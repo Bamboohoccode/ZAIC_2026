@@ -1,0 +1,10 @@
+# Dữ liệu BTC: luật cấm phát tán, không commit
+data/
+
+# Trọng số và output suy luận
+*.safetensors
+*.bin
+*.onnx
+*.gguf
+runs/
+submission*.jsonl

@@ -182,9 +182,9 @@ zaic2026-lifemate/
 │   ├── executor/                # [Tiên] bọc zaic_tools, quản lý ToolEnv
 │   └── pipeline.py              # [Tiên] ghép toàn bộ, chạy một mẫu
 ├── prompts/                     # prompt đã chốt, mỗi file có version + điểm
-│   └── gepa/                    # [Kiệt, Vương] kiet/ và vuong/: prompt của từng người; ensemble/: bản ghép chung
+│   └── gepa/                    # [Kiệt] kiet/, [Vương] vuong/ (riêng từng người); ensemble/ [chung, sau khi xong]
 ├── optimize/
-│   ├── gepa/                    # [Kiệt, Vương] cùng một module: metric/ dùng chung, kiet/ và vuong/ chạy độc lập, ensemble/ ghép hai prompt
+│   ├── gepa/                    # kiet/ [Kiệt], vuong/ [Vương], metric/ [nền chung], ensemble/ [chung, sau khi xong]
 │   └── wsp/                     # [Tiên] thí nghiệm weight-space programming
 ├── eval/                        # [Kiệt, Vương] harness: scorer cục bộ, log từng tầng, pass^k
 │   ├── scorer.py
@@ -207,8 +207,8 @@ Tên nhánh: `<module>/<tên>`, chữ thường, không dấu. Mỗi người đ
 | Tiên | `integration/tien` | `lifemate/pipeline.py`, `lifemate/executor/`, `lifemate/contracts.py`, `docker/`, `optimize/wsp/`, `configs/`, `scripts/` |
 | Khánh | `asr-mapper/khanh` | `lifemate/asr/`, `lifemate/mapper/` |
 | Hà | `verifier/ha` | `lifemate/verifier/` |
-| Kiệt | `gepa/kiet` | `lifemate/planner/`, `lifemate/state/`, `lifemate/validator/`, `eval/`, `synth/`, `optimize/gepa/metric/`, `optimize/gepa/kiet/`, `prompts/gepa/kiet/` (nền chung cùng Vương) |
-| Vương | `gepa/vuong` | `lifemate/planner/`, `lifemate/state/`, `lifemate/validator/`, `eval/`, `synth/`, `optimize/gepa/metric/`, `optimize/gepa/vuong/`, `prompts/gepa/vuong/` (nền chung cùng Kiệt) |
+| Kiệt | `gepa/kiet` | Thư mục riêng: `optimize/gepa/kiet/`, `prompts/gepa/kiet/`. Nền chung: `lifemate/planner/`, `lifemate/state/`, `lifemate/validator/`, `eval/`, `synth/`, `optimize/gepa/metric/` |
+| Vương | `gepa/vuong` | Thư mục riêng: `optimize/gepa/vuong/`, `prompts/gepa/vuong/`. Nền chung: `lifemate/planner/`, `lifemate/state/`, `lifemate/validator/`, `eval/`, `synth/`. Dùng chung `optimize/gepa/metric/` |
 
 Cây thư mục trong nhánh của từng người (chỉ phần của họ, phần còn lại giữ nguyên như `main`):
 
@@ -232,18 +232,21 @@ verifier/ha
 └── lifemate/verifier/   README.md, data.py, train.py, infer.py, diff.py, tests/
 
 gepa/kiet
-├── lifemate/
-│   ├── planner/         [nền chung] README.md, prompt.py, structured.py, loop.py, tests/
-│   ├── state/           [nền chung] README.md, state.py, history.py, tests/
-│   └── validator/       [nền chung] README.md, validate.py, schema.py, tests/
-├── eval/                [nền chung] scorer.py, run_eval.py, splits/
-├── synth/               [nền chung] README.md, gen_three_labels.py, tests/
 ├── optimize/gepa/
-│   ├── metric/          [nền chung] metric.py, feedback.py
-│   └── kiet/            run_gepa.py, config.yaml
-└── prompts/gepa/kiet/   planner_vN.txt, mapper_vN.txt (kèm điểm)
+│   ├── kiet/            [riêng, chỉ Kiệt sửa]
+│   │   ├── run_gepa.py
+│   │   └── config.yaml
+│   ├── vuong/           [riêng của Vương, Kiệt chỉ đọc]
+│   ├── metric/          metric.py, feedback.py   [nền chung, không tên người]
+│   └── ensemble/        [chung, tạo sau khi cả hai xong]
+├── prompts/gepa/
+│   ├── kiet/            planner_vN.txt, mapper_vN.txt (kèm điểm)   [riêng]
+│   ├── vuong/           [riêng của Vương]
+│   └── ensemble/        [chung, tạo sau khi cả hai xong]
+├── lifemate/planner/, state/, validator/    [nền chung, không tên người]
+├── eval/, synth/                            [nền chung]
 
-gepa/vuong: giống hệt, chỉ thay `kiet` bằng `vuong` ở hai thư mục GEPA và prompts.
+gepa/vuong: giống gepa/kiet, chỉ khác: sửa `optimize/gepa/vuong/` và `prompts/gepa/vuong/`, dùng chung `optimize/gepa/metric/`.
 
 Sau khi cả hai xong: PR chung vào main thêm optimize/gepa/ensemble/ và prompts/gepa/ensemble/ (mục 5.6)
 ```
@@ -256,7 +259,7 @@ d. Gộp vào `main` bằng PR: PR nhỏ, một người review, mô tả PR ghi
 e. Từ 15/11 chỉ nhận PR sửa lỗi, sau tag `freeze-15-11` không đổi model.
 f. Cập nhật nhánh của mình từ `main` mỗi ngày để tránh lệch hợp đồng dữ liệu.
 g. Ngoại lệ duy nhất được commit thẳng lên `main` không qua PR: file `task_flow/<tên>.md` của chính mình (mục 3.2).
-h. Kiệt và Vương cùng làm **một module GEPA** và **nền chung** (planner, state, validator, eval, synth, metric). Mỗi người chạy GEPA trong thư mục riêng (`optimize/gepa/<tên>/`, `prompts/gepa/<tên>/`). Phần nền chung cả hai cùng sửa, ai sửa xin người kia review trước khi gộp. Thư mục `ensemble/` chỉ tạo sau khi cả hai xong (mục 5.6).
+h. Module GEPA chia theo người trong thư mục riêng: `optimize/gepa/kiet/` và `optimize/gepa/vuong/`; `prompts/gepa/kiet/` và `prompts/gepa/vuong/`. Mỗi người chỉ sửa thư mục của mình, người còn lại chỉ đọc. `optimize/gepa/metric/` là nền chung, không có tên người. `optimize/gepa/ensemble/` và `prompts/gepa/ensemble/` do cả hai làm qua một PR chung sau khi xong (mục 5.6). Nền chung (`lifemate/planner/`, `state/`, `validator/`, `eval/`, `synth/`) vẫn chung, ai sửa thì người kia review trước khi gộp.
 
 ### 3.2 Quy trình `task_flow/`: khai báo luồng, ghi note, tick ClickUp
 Mỗi người nhận một task lớn trên ClickUp (list `Task_16/11`), tương ứng mục 5. Cách chia nhỏ việc do từng người tự nghiên cứu và tự quyết định. Để cả nhóm theo dõi được, mỗi người làm theo ba bước:
@@ -313,8 +316,8 @@ c. Mọi module ghi log đầu vào và đầu ra theo mẫu vào `runs/<run_id>
 | Integration, executor, Docker, WSP | **Tiên** | Chạy end to end offline trong 30 giây. Thử làm Planner thông minh hơn bằng sửa trọng số | `pipeline.py`, Docker, báo cáo WSP | Docker chạy offline trên mẫu mẫu, đếm tham số dưới 6B |
 | ASR + Mapper | **Khánh** | Giảm lỗi thực thể và độ trễ ASR | Bảng WER, n-best, mapper + entity guard | Có bảng WER theo giọng và lỗi thực thể, ASR cả hội thoại dưới ngân sách thời gian |
 | Verifier | **Hà** | Verifier dưới 0,4B, nhanh, ít bỏ sót | Laya fine-tune + ngưỡng + diff | Điểm cuối không thấp hơn khi không có Verifier, thêm dưới 100 ms mỗi mẫu |
-| GEPA (bản của Kiệt) + nền chung cùng Vương | **Kiệt** | Một bản prompt tối ưu bằng GEPA, độc lập với Vương. Cùng Vương làm nền: planner, state, validator, eval, synth, metric | `eval/`, `synth/`, metric GEPA, `prompts/gepa/kiet/`, nền chung | Scorer cục bộ khớp công thức BTC, prompt của Kiệt có điểm giữ lại cao hơn baseline |
-| GEPA (bản của Vương) + nền chung cùng Kiệt | **Vương** | Một bản prompt tối ưu bằng GEPA, độc lập với Kiệt. Cùng Kiệt làm nền: planner, state, validator, eval, synth, metric | `planner/`, `state/`, `validator/`, `prompts/gepa/vuong/`, nền chung | F1 từng nhãn ổn, plan lỗi cấu trúc gần 0, prompt của Vương có điểm giữ lại cao hơn baseline |
+| GEPA (bản của Kiệt) + nền chung cùng Vương | **Kiệt** | Một bản prompt tối ưu bằng GEPA, độc lập với Vương. Cùng Vương làm nền: planner, state, validator, eval, synth | `optimize/gepa/kiet/`, `prompts/gepa/kiet/`, `eval/`, `synth/`, nền chung (kèm `optimize/gepa/metric/`) | Scorer cục bộ khớp công thức BTC, prompt của Kiệt có điểm giữ lại cao hơn baseline |
+| GEPA (bản của Vương) + nền chung cùng Kiệt | **Vương** | Một bản prompt tối ưu bằng GEPA, độc lập với Kiệt. Cùng Kiệt làm nền: planner, state, validator, eval, synth | `optimize/gepa/vuong/`, `prompts/gepa/vuong/`, `planner/`, `state/`, `validator/`, nền chung | F1 từng nhãn ổn, plan lỗi cấu trúc gần 0, prompt của Vương có điểm giữ lại cao hơn baseline |
 | Ensemble hai prompt GEPA | **Kiệt và Vương** | Ghép hai bản prompt nếu đo thấy tốt hơn bản đơn | `optimize/gepa/ensemble/`, `prompts/gepa/ensemble/` | Điểm giữ lại ensemble hơn bản đơn tốt nhất, độ trễ còn trong ngân sách 30 giây |
 
 ### 5.1 Tiên: tích hợp và weight-space programming
@@ -351,7 +354,7 @@ b. Chia train theo app (train 80 phần trăm app, giữ 20 phần trăm app l�
 c. Log từng tầng, báo cáo lỗi theo tầng: ASR, Mapper, Planner, Validator, Verifier.
 d. Chạy mỗi mẫu k lần để đo pass^k (độ ổn định).
 e. `synth/`: sinh bộ test 3 nhãn (đủ thông tin, thiếu slot, không có app) từ catalog của public test (luật cho phép dùng catalog và `zaic_tools` để sinh dữ liệu). Không gán nhãn cho audio hay request của test.
-f. **Metric GEPA:** hàm trả điểm kèm text phản hồi (diff call sai, call thừa, nhầm ask với `[]`, lỗi hash) để LLM phản tư đọc được. Metric và chia train, val theo app là **dùng chung** cho Kiệt và Vương, để hai bản prompt so sánh được với nhau.
+f. **Metric GEPA:** hàm trả điểm kèm text phản hồi (diff call sai, call thừa, nhầm ask với `[]`, lỗi hash) để LLM phản tư đọc được. Metric nằm trong `optimize/gepa/metric/`, là nền chung của Kiệt và Vương. Cả hai cùng dùng để chấm cùng thước. Ai đổi metric thì người kia review trước khi gộp.
 g. **GEPA của riêng Kiệt:** chạy độc lập với Vương trên cùng module (prompt Planner và Mapper), kết quả vào `prompts/gepa/kiet/`.
 
 ### 5.5 Vương: Planner, state, validator, GEPA
@@ -359,7 +362,7 @@ a. Baseline Planner (Qwen ≤4B instruct): JSON có `action`, structured output,
 b. `state/`: lịch sử lượt, slot đã biết, ngày giờ hiện tại, action đã gọi.
 c. `validator/`: tool tồn tại, đủ tham số bắt buộc, đúng kiểu và enum. Lỗi trả về Planner kèm thông báo cụ thể. Thiếu tham số thì chuyển sang `ask_user`, không bịa.
 d. Giữ Planner dưới 16.384 token kể cả lịch sử. Có chiến lược cắt lịch sử.
-e. **GEPA của riêng Vương:** chạy ([dspy.GEPA](https://dspy.ai/api/optimizers/GEPA) hoặc gói `gepa`) trên prompt Planner và Mapper, độc lập với Kiệt, dùng metric chung của Kiệt. Kết quả vào `prompts/gepa/vuong/`.
+e. **GEPA của riêng Vương:** chạy ([dspy.GEPA](https://dspy.ai/api/optimizers/GEPA) hoặc gói `gepa`) trên prompt Planner và Mapper, độc lập với Kiệt, dùng metric chung trong `optimize/gepa/metric/`. Kết quả vào `prompts/gepa/vuong/`.
 
 ### 5.6 GEPA (Kiệt và Vương cùng làm một module, độc lập rồi ensemble)
 Hai người **cùng làm một module**: tối ưu prompt Planner và Mapper bằng GEPA. Mỗi người chạy riêng, ra một bản prompt riêng. Sau khi cả hai xong thì ensemble hai bản đó. Không chia module thành hai phần.
@@ -371,7 +374,7 @@ d. Theo dõi riêng điểm trên nhóm đủ thông tin để GEPA không tối
 e. Chỉ nhận prompt mới khi điểm giữ lại tăng so với baseline.
 f. **Để hai bản độc lập và so sánh được:** dùng chung metric, chung baseline, chung cách chia train và val theo app, chung tập giữ lại. Khác nhau ở cấu hình GEPA, seed, prompt khởi đầu hoặc LLM phản tư do mỗi người tự chọn. Không xem prompt của nhau trước khi cả hai chốt.
 g. **Ensemble (sau khi cả hai xong, dự kiến 13 đến 14/11):** làm chung, thư mục `optimize/gepa/ensemble/`, PR chung vào `main`. Cách ghép chốt theo số đo. Ứng viên: (1) chạy cả hai prompt rồi chọn plan khớp nhau, lệch thì để Verifier phân xử; (2) đưa cả hai vào một vòng GEPA merge; (3) giữ bản đơn tốt hơn nếu ensemble không hơn rõ. Ensemble tốn thêm một lượt gọi Qwen mỗi mẫu, nên phải đo độ trễ so với trần 30 giây.
-h. **Nền chung:** planner, state, validator, eval, synth, metric do Kiệt và Vương cùng làm, không tách. Ai sửa thì người kia review trước khi gộp vào `main`.
+h. **Thư mục GEPA riêng từng người:** `optimize/gepa/kiet/`, `optimize/gepa/vuong/`, `prompts/gepa/kiet/`, `prompts/gepa/vuong/`. Mỗi người chỉ sửa thư mục của mình. **Nền chung** (planner, state, validator, eval, synth, metric) vẫn dùng chung, ai sửa thì người kia review trước khi gộp vào `main`.
 
 ---
 

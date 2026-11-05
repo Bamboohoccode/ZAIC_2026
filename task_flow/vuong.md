@@ -18,7 +18,7 @@ Số liệu train: 1.545 mẫu (act 1.217, ask 217, empty 111), trung bình 2,3 
 ## Luồng (mỗi bước là 1 subtask trong ClickUp "[Vương] Start luồng")
 | # | Bước | Hạn | Điều kiện xong |
 |---|---|---|---|
-| 1 | Tạo `eval/splits/dev_ids.txt` (chia theo app) + script chạy dev + báo điểm theo act/ask/empty | 06/11 | Lệnh chạy dev in ra score tổng và điểm theo từng nhãn |
+| 1 | Tạo `eval/splits/dev_ids.txt` (chia theo app) + script chạy dev + báo điểm theo act/ask/empty | 06/11 | **[XONG 06/11]** `dev_ids.txt` (300 mẫu, 9 held-out apps), `scorer.py` (báo điểm tổng + act/ask/empty + diagnostics), `pipeline.py --ids` chạy chuẩn |
 | 2 | Baseline trên GPU cloud: `pipeline.py --text` trên dev, lưu trace, đo thời gian mỗi mẫu | 07/11 | Có điểm baseline + latency, ghi vào `docs/DECISIONS.md` |
 | 3 | Phân nhóm lỗi (script): sai tool, sai tham số, read thừa, thiếu ask, ask thay vì làm, phải rỗng, lệch hash | 07/11 | Bảng % lỗi theo nhóm |
 | 4 | Refactor: `lifemate/planner` (prompt, `plan_step`, `run_agent`), `lifemate/state` (`build_messages`, cắt history), `lifemate/validator` (`env.validate` + `unseen_ids`). Điểm trước và sau phải bằng nhau | 08/11 | Unit test pass, dev score không đổi |
@@ -38,3 +38,4 @@ Số liệu train: 1.545 mẫu (act 1.217, ask 217, empty 111), trung bình 2,3 
 
 ## Nhật ký
 - 05/11: Đọc đề + repo, chốt D1 đến D6, chuyển dữ liệu vào `data/`, replay gold 100 mẫu = 1.0.
+- 06/11: Xong Subtask 1: sinh `eval/splits/dev_ids.txt` (300 mẫu, giữ 9 app lạ), cập nhật `eval/scorer.py` hỗ trợ chẩn đoán chi tiết theo `act`/`ask`/`empty`, thêm cờ `--ids` vào `lifemate/pipeline.py`. Đồng bộ sạch sẽ với `update_3_flow` của Tiên.

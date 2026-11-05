@@ -7,7 +7,7 @@ Cập nhật 06/11/2026. Nguồn pipeline: `PIPELINE.md` (plan cũ) và `New_pla
 > b. Ngân sách tham số: PhoWhisper-large + Qwen ≤4B + Laya-multilingual. Verifier dùng Laya (không dùng Jev).
 > c. Tên ClickUp đã xác nhận (trưởng nhóm, 05/11): Tiên Nguyễn (Tiên), Trình Nguyễn (Khánh), Danny Hong (Kiệt). Hà và Vương khớp theo danh sách thành viên.
 > d. Kiệt và Vương cùng làm một module GEPA, mỗi người một bản prompt độc lập rồi ensemble. Nền chung (planner, mapper, state, validator, eval, synth, metric) do Kiệt và Vương cùng làm, không tách (trưởng nhóm xác nhận 05/11).
-> e. **Thay đổi 06/11 (yêu cầu của trưởng nhóm):** (1) Verifier của Hà chỉ so action đã lưu trong dialogue state với plan của Planner và trả ĐÚNG hoặc SAI, SAI thì hỏi thẳng user. (2) Kiệt và Vương phụ trách cải tiến Planner (ra action) và Mapper (bắt đúng lỗi, sửa lỗi). Khánh chỉ còn ASR. Cách soạn câu hỏi user khi Verifier báo SAI chưa chốt (xem mục 9g).
+> e. **Thay đổi 06/11 (yêu cầu của trưởng nhóm):** (1) Verifier của Hà chỉ so action đã lưu trong dialogue state với plan của Planner và trả ĐÚNG hoặc SAI, SAI thì hỏi thẳng user. (2) Kiệt và Vương phụ trách cải tiến Planner (ra action) và Mapper (bắt đúng lỗi, sửa lỗi). (3) Khánh làm ASR và Entity guard (entity guard tách khỏi Mapper). Cách soạn câu hỏi user khi Verifier báo SAI chưa chốt (xem mục 9g).
 
 ---
 
@@ -93,7 +93,7 @@ gantt
 flowchart TD
     A["Audio: lượt mới + history<br/>WAV 16 kHz mono"] --> B["ASR [Khánh]<br/>PhoWhisper-large (HF transformers, PyTorch fp16)<br/>beam search n-best + điểm"]
     B --> C["Mapper [Kiệt, Vương]<br/>bắt lỗi và sửa lỗi ASR, phương ngữ<br/>prompt chạy trong Qwen 4B<br/>từ điển thực thể từ catalog tool"]
-    C --> G{"Entity guard [Kiệt, Vương]<br/>Python: regex số, giờ, tên"}
+    C --> G{"Entity guard [Khánh]<br/>Python: regex số, giờ, tên"}
     G -- khớp --> D
     G -- lệch --> C0["Dùng lại hypothesis gốc"] --> D
     S[("Dialogue state [Kiệt, Vương]<br/>Python dataclass/pydantic<br/>history, slot, action đã lưu, ngày giờ")] --> D
@@ -118,7 +118,7 @@ Cột công nghệ là đề xuất khởi điểm, người phụ trách đư�
 |---|---|---|---|---|---|---|
 | 1 | ASR | Khánh | Audio WAV 16 kHz mono (lượt mới và các lượt user trong history) | `ASROut`: n-best 5 hypothesis + điểm | PhoWhisper-large (VinAI, tinh chỉnh từ Whisper, 844 giờ tiếng Việt nhiều giọng), HF `transformers`, PyTorch fp16. Beam search để lấy n-best. Tuỳ chọn tăng tốc: chuyển đổi sang CTranslate2/faster-whisper nếu đo thấy lợi và giữ được n-best | Suy luận (offline) |
 | 2 | Mapper: bắt lỗi, sửa lỗi | Kiệt, Vương (nền chung) | n-best + danh sách thực thể hợp lệ từ catalog | Query tiếng Việt chuẩn | Prompt chạy trên Qwen 4B (không thêm model). Bắt lỗi nhận dạng và từ vùng miền, sửa về đúng thực thể trong catalog (tên người, thiết bị, app). Prompt tối ưu bằng GEPA | Suy luận |
-| 3 | Entity guard | Kiệt, Vương (nền chung) | Query trước và sau rewrite | Query đã kiểm | Python thuần: regex trích số, giờ, tiền, tên. Lệch thì dùng hypothesis gốc | Suy luận |
+| 3 | Entity guard | Khánh | Query trước và sau rewrite của Mapper, danh sách thực thể từ catalog | Query đã kiểm | Python thuần: regex trích số, giờ, tiền, tên. Lệch thì dùng hypothesis gốc | Suy luận |
 | 4 | Dialogue state | Kiệt, Vương (nền chung) | Query chuẩn, history, kết quả tool trước | `state`: slot đã biết, slot thiếu, action đã lưu, ngày giờ hiện tại | Python (dataclass hoặc pydantic). Có chiến lược cắt history để giữ dưới 16.384 token | Suy luận |
 | 5 | Planner (ra action) | Kiệt, Vương (nền chung) | Query chuẩn, state, danh sách tool | `Plan` (3 nhánh `action`) | Qwen 4B không vision encoder, chạy bằng engine suy luận chọn sau khi đo (HF `transformers` hoặc vLLM, chọn theo tốc độ trên A30 và tính offline). Structured output theo schema ToolEnv bằng thư viện constrained decoding (Outlines, xgrammar hoặc guided decoding của vLLM, chọn khi làm). Greedy, seed cố định. Suy luận tự do rồi mới ép JSON cuối | Suy luận |
 | 6 | Schema validator | Kiệt, Vương (nền chung) | `Plan` | Hợp lệ hoặc lỗi cụ thể | Python: `jsonschema` hoặc pydantic, đọc schema từ `zaic_tools`. Kiểm tool tồn tại, tham số bắt buộc, kiểu, enum. Thiếu tham số thì đổi sang `ask_user` | Suy luận |
@@ -145,7 +145,7 @@ c. Tham số của model tính vào ngân sách mục 2.2, bước nào thêm mo
 | **Tổng** | | **khoảng 5,9B, dư khoảng 0,1B so với trần 6B** |
 
 a. Rất sát trần. Phải đếm tham số thật bằng code (`scripts/count_params.py`) trước khi chốt model.
-b. Mapper không có model riêng để khỏi tốn tham số và độ trễ. Nếu cần thêm tham số, hạ ASR xuống PhoWhisper-medium (khoảng 0,77B) để lấy khoảng 0,8B dư.
+b. Mapper không có model riêng để khỏi tốn tham số và độ trễ. Entity guard là code, không tốn tham số. Nếu cần thêm tham số, hạ ASR xuống PhoWhisper-medium (khoảng 0,77B) để lấy khoảng 0,8B dư.
 c. Mặc định 2B dư mà Hà nhắc tới không còn khi giữ ASR large. Hà dùng Laya nên không cần nó.
 
 ### 2.3 Về Jev và Laya
@@ -174,7 +174,8 @@ zaic2026-lifemate/
 ├── lifemate/
 │   ├── contracts.py             # schema dữ liệu giữa các module (mục 4)
 │   ├── asr/                     # [Khánh] PhoWhisper, n-best, confidence
-│   ├── mapper/                  # [Kiệt, Vương] prompt bắt lỗi và sửa lỗi, từ điển thực thể, entity guard
+│   ├── guard/                   # [Khánh] entity guard: regex số, giờ, tiền, tên
+│   ├── mapper/                  # [Kiệt, Vương] prompt bắt lỗi và sửa lỗi, từ điển thực thể
 │   ├── state/                   # [Kiệt, Vương] dialogue state, ngày giờ hiện tại
 │   ├── planner/                 # [Kiệt, Vương] prompt, structured output, vòng lặp
 │   ├── validator/               # [Kiệt, Vương] schema validator bằng code
@@ -202,12 +203,12 @@ Quy ước: mỗi module có `README.md` ngắn (vào, ra, cách chạy, điểm
 ### 3.1 Quy ước nhánh: mỗi người một nhánh, mỗi nhánh chứa module của người đó
 Tên nhánh: `<module>/<tên>`, chữ thường, không dấu. Mỗi người đúng một nhánh dài hạn, tách từ `main`, chỉ chứa và chỉ sửa các module được giao. Commit: `[module] động từ: nội dung`. Tag: `freeze-15-11`, `submit-docker-16-11`.
 
-Nhánh của Khánh đổi từ `asr-mapper/khanh` thành `asr/khanh` vì Mapper chuyển sang Kiệt và Vương.
+Nhánh của Khánh đổi từ `asr-mapper/khanh` thành `asr-guard/khanh` vì Mapper chuyển sang Kiệt và Vương, còn Khánh nhận thêm Entity guard.
 
 | Người | Nhánh | Module trong nhánh |
 |---|---|---|
 | Tiên | `integration/tien` | `lifemate/pipeline.py`, `lifemate/executor/`, `lifemate/contracts.py`, `docker/`, `optimize/wsp/`, `configs/`, `scripts/` |
-| Khánh | `asr/khanh` | `lifemate/asr/` |
+| Khánh | `asr-guard/khanh` | `lifemate/asr/`, `lifemate/guard/` |
 | Hà | `verifier/ha` | `lifemate/verifier/` |
 | Kiệt | `gepa/kiet` | Thư mục riêng: `optimize/gepa/kiet/`, `prompts/gepa/kiet/`. Nền chung: `lifemate/planner/`, `lifemate/mapper/`, `lifemate/state/`, `lifemate/validator/`, `eval/`, `synth/`, `optimize/gepa/metric/` |
 | Vương | `gepa/vuong` | Thư mục riêng: `optimize/gepa/vuong/`, `prompts/gepa/vuong/`. Nền chung: `lifemate/planner/`, `lifemate/mapper/`, `lifemate/state/`, `lifemate/validator/`, `eval/`, `synth/`. Dùng chung `optimize/gepa/metric/` |
@@ -225,9 +226,10 @@ integration/tien
 ├── configs/             budget.yaml, pipeline.yaml
 └── scripts/             count_params.py, bench_latency.py
 
-asr/khanh
+asr-guard/khanh
 └── lifemate/
-    └── asr/             README.md, transcribe.py, nbest.py, bench.py, tests/
+    ├── asr/             README.md, transcribe.py, nbest.py, bench.py, tests/
+    └── guard/           README.md, entities.py, guard.py, tests/
 
 verifier/ha
 └── lifemate/verifier/   README.md, data.py, train.py, infer.py, diff.py, tests/
@@ -245,7 +247,7 @@ gepa/kiet
 │   ├── vuong/           [riêng của Vương]
 │   └── ensemble/        [chung, tạo sau khi cả hai xong]
 ├── lifemate/planner/, mapper/, state/, validator/    [nền chung, không tên người]
-│   (mapper/: README.md, prompt.py, entities.py, guard.py, tests/)
+│   (mapper/: README.md, prompt.py, entities.py, tests/)
 ├── eval/, synth/                            [nền chung]
 
 gepa/vuong: giống gepa/kiet, chỉ khác: sửa `optimize/gepa/vuong/` và `prompts/gepa/vuong/`, dùng chung `optimize/gepa/metric/`.
@@ -317,7 +319,7 @@ d. Mọi module ghi log đầu vào và đầu ra theo mẫu vào `runs/<run_id>
 | Module | Người | Mục tiêu | Sản phẩm | Điều kiện xong |
 |---|---|---|---|---|
 | Integration, executor, Docker, WSP | **Tiên** | Chạy end to end offline trong 30 giây. Thử làm Planner thông minh hơn bằng sửa trọng số | `pipeline.py`, Docker, báo cáo WSP | Docker chạy offline trên mẫu mẫu, đếm tham số dưới 6B |
-| ASR | **Khánh** | Giảm lỗi thực thể và độ trễ ASR, đưa n-best cho Mapper | Bảng WER, n-best | Có bảng WER theo giọng và lỗi thực thể, ASR cả hội thoại dưới ngân sách thời gian |
+| ASR + Entity guard | **Khánh** | Giảm lỗi thực thể và độ trễ ASR, đưa n-best cho Mapper, chặn Mapper làm hỏng số, giờ, tên | Bảng WER, n-best, entity guard | Có bảng WER theo giọng và lỗi thực thể, ASR cả hội thoại dưới ngân sách thời gian, guard có test và số đo chặn đúng, chặn nhầm |
 | Verifier | **Hà** | Verifier dưới 0,4B, nhanh, chỉ trả ĐÚNG hoặc SAI khi so action đã lưu với plan | Laya fine-tune + ngưỡng + diff | Điểm cuối không thấp hơn khi không có Verifier, thêm dưới 100 ms mỗi mẫu |
 | Planner (ra action), Mapper (bắt lỗi, sửa lỗi), GEPA bản của Kiệt + nền chung cùng Vương | **Kiệt** | Cải tiến Planner và Mapper. Một bản prompt tối ưu bằng GEPA, độc lập với Vương. Cùng Vương làm nền: planner, mapper, state, validator, eval, synth | `optimize/gepa/kiet/`, `prompts/gepa/kiet/`, `eval/`, `synth/`, nền chung (kèm `optimize/gepa/metric/`) | Scorer cục bộ khớp công thức BTC, prompt của Kiệt có điểm giữ lại cao hơn baseline |
 | Planner (ra action), Mapper (bắt lỗi, sửa lỗi), GEPA bản của Vương + nền chung cùng Kiệt | **Vương** | Cải tiến Planner và Mapper. Một bản prompt tối ưu bằng GEPA, độc lập với Kiệt. Cùng Kiệt làm nền: planner, mapper, state, validator, eval, synth | `optimize/gepa/vuong/`, `prompts/gepa/vuong/`, `planner/`, `mapper/`, `state/`, `validator/`, nền chung | F1 từng nhãn ổn, plan lỗi cấu trúc gần 0, prompt của Vương có điểm giữ lại cao hơn baseline |
@@ -335,11 +337,13 @@ c. **Giới hạn đã biết từ blog:** chỉ gỡ chướng ngại, không t
 d. **Go/no-go ngày 13/11:** chỉ giữ nếu điểm cục bộ tăng rõ và không tăng độ trễ. Nếu không, bỏ và dùng model gốc.
 e. **Phải hỏi BTC:** dùng model mạnh bên ngoài để sửa trọng số lúc phát triển có hợp lệ không, và model sau khi sửa có bị tính là "đã public trước 26/10" không. Email: aichallenge@zalo.me.
 
-### 5.2 Khánh: ASR
+### 5.2 Khánh: ASR và Entity guard
 a. Đo WER của PhoWhisper small, medium, large trên audio train (đối chiếu `audio_text`), tách theo giọng vùng miền. Đo thêm lỗi thực thể (tên người, số tiền, giờ).
 b. Xuất n-best 5 hypothesis bằng beam search kèm điểm, đưa cho Mapper của Kiệt và Vương qua `ASROut`.
 c. Đo tốc độ trên GPU gần A30. Chỉ chạy ASR một lần cho mỗi audio, cache theo hash audio, gom batch cho lịch sử 24 lượt.
-d. Ablation: chỉ dùng 1 transcript so với n-best, so điểm cuối (phối hợp với Kiệt và Vương vì cần Mapper chạy).
+d. **Entity guard bằng code Python** (`lifemate/guard/`): trích số, giờ, tiền, tên bằng regex và danh sách thực thể từ catalog, từ query trước và sau Mapper. Lệch thì dùng lại hypothesis gốc. Cần xử lý cách nói số tiếng Việt ("hai trăm nghìn" so với "200.000", "ba rưỡi" so với "3:30") để không chặn nhầm.
+e. Test guard trên đầu ra thật của Mapper (phối hợp Kiệt và Vương). Đo tỉ lệ chặn đúng (Mapper làm hỏng thật) và chặn nhầm (Mapper sửa đúng nhưng guard chặn).
+f. Ablation: 1 transcript so với n-best, và có hay không có entity guard, so điểm cuối (phối hợp với Kiệt và Vương vì cần Mapper chạy).
 
 ### 5.3 Hà: Verifier bằng Laya (chỉ trả ĐÚNG hoặc SAI)
 a. **Ngày đầu:** smoke-test `laya-multilingual` trên câu tiếng Việt có dấu và giọng vùng miền. Báo kết quả cho cả nhóm. Nếu tiếng Việt kém, chuyển sang phương án d.
@@ -354,12 +358,12 @@ h. **Giới hạn đã biết:** vì không có query, Laya chỉ phát hiện l
 ### 5.4 Kiệt: Planner, Mapper, harness, dữ liệu synthetic, metric GEPA
 a. `eval/scorer.py` cài đúng công thức mục 1.1, kiểm tra trên nhãn train. Chạy được ToolEnv qua `zaic_tools` và so `state_hash`.
 b. Chia train theo app (train 80 phần trăm app, giữ 20 phần trăm app lạ) vì app test khác train.
-c. Log từng tầng, báo cáo lỗi theo tầng: ASR, Mapper, Planner, Validator, Verifier.
+c. Log từng tầng, báo cáo lỗi theo tầng: ASR, Mapper, Entity guard, Planner, Validator, Verifier.
 d. Chạy mỗi mẫu k lần để đo pass^k (độ ổn định).
 e. `synth/`: sinh bộ test 3 nhãn (đủ thông tin, thiếu slot, không có app) từ catalog của public test (luật cho phép dùng catalog và `zaic_tools` để sinh dữ liệu). Không gán nhãn cho audio hay request của test.
 f. **Metric GEPA:** hàm trả điểm kèm text phản hồi (diff call sai, call thừa, nhầm ask với `[]`, lỗi hash) để LLM phản tư đọc được. Metric nằm trong `optimize/gepa/metric/`, là nền chung của Kiệt và Vương. Cả hai cùng dùng để chấm cùng thước. Ai đổi metric thì người kia review trước khi gộp.
 g. **Planner (ra action), nền chung với Vương:** cải tiến để ra đúng `action` (gọi tool, hỏi lại, từ chối) và đúng chuỗi call.
-h. **Mapper (bắt lỗi, sửa lỗi), nền chung với Vương:** prompt bắt lỗi nhận dạng và từ vùng miền từ n-best, sửa về đúng thực thể trong catalog, entity guard bằng code (số, giờ, tên còn nguyên, lệch thì dùng hypothesis gốc). Ablation 3 cấu hình: không Mapper, Mapper cũ, Mapper mới, so điểm cuối chứ không chỉ WER.
+h. **Mapper (bắt lỗi, sửa lỗi), nền chung với Vương:** prompt bắt lỗi nhận dạng và từ vùng miền từ n-best, sửa về đúng thực thể trong catalog. Entity guard do Khánh làm, Mapper phải đưa đầu ra theo `contracts.py` để guard so được. Ablation 3 cấu hình: không Mapper, Mapper cũ, Mapper mới, so điểm cuối chứ không chỉ WER.
 i. **GEPA của riêng Kiệt:** chạy độc lập với Vương trên cùng module (prompt Planner và Mapper), kết quả vào `prompts/gepa/kiet/`.
 
 ### 5.5 Vương: Planner, Mapper, state, validator, GEPA
@@ -390,7 +394,7 @@ h. **Thư mục GEPA riêng từng người:** `optimize/gepa/kiet/`, `optimize/
 |---|---|---|
 | M0 | 07/11 | Đọc luật, dựng skeleton repo, giải nén dữ liệu, `scorer.py` chạy được, Hà báo smoke-test Laya, đếm tham số thật |
 | M1 | 09/11 | Mỗi module có bản v1, `pipeline.py` chạy end to end, điểm baseline cục bộ |
-| M2 | 12/11 | Xong các ablation (Mapper, Verifier, n-best). Chốt giữ hay bỏ từng thành phần |
+| M2 | 12/11 | Xong các ablation (Mapper, Entity guard, Verifier, n-best). Chốt giữ hay bỏ từng thành phần |
 | M3 | 13 đến 14/11 | Kiệt và Vương mỗi người chốt prompt GEPA của mình rồi ensemble. WSP go/no-go. Laya đã fine-tune. Chọn ngưỡng |
 | M4 | 15/11 | Đóng băng. Build Docker, chạy offline, đo thời gian. Nộp sớm trong ngày |
 | Hạn | 16/11 23:59 | Nộp Docker, kèm tài liệu nguồn gốc và giấy phép model |
@@ -417,11 +421,12 @@ Mỗi người có thể nộp thử public test 5 lần mỗi ngày: dành 1 l�
 | R9 | Rò rỉ dữ liệu | `data/` trong `.gitignore`, repo private, không chia sẻ ngoài nhóm |
 | R10 | Verifier báo SAI nhầm nên hỏi user thừa (không còn vòng retry Planner) | Chọn ngưỡng trên tập dev, theo dõi tỉ lệ hỏi thừa trên nhóm đủ thông tin |
 | R11 | Verifier không bắt được plan sai ý user vì không có query | Planner và GEPA chịu trách nhiệm đúng ý, đo F1 từng nhãn |
+| R12 | Entity guard chặn nhầm (cách nói số tiếng Việt khác dạng chữ số) làm mất sửa lỗi đúng của Mapper | Chuẩn hoá số và giờ trước khi so, đo tỉ lệ chặn nhầm trên đầu ra thật của Mapper |
 
 ---
 
 ## 8. Quy trình làm việc
-a. Mỗi người một nhánh theo mục 3.1 (`integration/tien`, `asr/khanh`, `verifier/ha`, `gepa/kiet`, `gepa/vuong`), PR nhỏ vào `main`, một người review.
+a. Mỗi người một nhánh theo mục 3.1 (`integration/tien`, `asr-guard/khanh`, `verifier/ha`, `gepa/kiet`, `gepa/vuong`), PR nhỏ vào `main`, một người review.
 b. Họp 15 phút mỗi ngày: hôm qua xong gì, hôm nay làm gì, đang vướng gì. Mỗi người đã cập nhật `task_flow/<tên>.md` và tick subtask trong task "Start luồng" trước buổi họp (mục 3.2).
 c. Mọi con số báo cáo dùng điểm của `eval/scorer.py` trên tập giữ lại chia theo app.
 d. Mọi thay đổi model hay prompt kèm một dòng trong `docs/DECISIONS.md`: thay gì, điểm trước và sau, độ trễ.

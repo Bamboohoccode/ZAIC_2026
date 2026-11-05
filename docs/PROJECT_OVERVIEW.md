@@ -1,12 +1,13 @@
 # ZAIC 2026 LifeMate: Tổng quan dự án, kiến trúc và cấu trúc repo
 
-Cập nhật 05/11/2026. Nguồn pipeline: `PIPELINE.md` (plan cũ) và `New_plan.md` (plan mới).
+Cập nhật 06/11/2026. Nguồn pipeline: `PIPELINE.md` (plan cũ) và `New_plan.md` (plan mới).
 
 > **Giả định trong tài liệu này (cần xác nhận, xem mục 9)**
 > a. Luật LifeMate lấy từ hai repo tóm tắt của thí sinh khác (lenamkhanhh/ZaloAIC, Nguyen-Le-Tuan/ZAIC_2026), chưa đọc được portal chính thức. Mốc thời gian đã đối chiếu với challenge.zalo.ai (05/11). Giới hạn tham số và luật khác chưa xác minh từ PDF thể lệ.
 > b. Ngân sách tham số: PhoWhisper-large + Qwen ≤4B + Laya-multilingual. Verifier dùng Laya (không dùng Jev).
 > c. Tên ClickUp đã xác nhận (trưởng nhóm, 05/11): Tiên Nguyễn (Tiên), Trình Nguyễn (Khánh), Danny Hong (Kiệt). Hà và Vương khớp theo danh sách thành viên.
-> d. Kiệt và Vương cùng làm một module GEPA, mỗi người một bản prompt độc lập rồi ensemble. Nền chung (planner, state, validator, eval, synth, metric) do Kiệt và Vương cùng làm, không tách (trưởng nhóm xác nhận 05/11).
+> d. Kiệt và Vương cùng làm một module GEPA, mỗi người một bản prompt độc lập rồi ensemble. Nền chung (planner, mapper, state, validator, eval, synth, metric) do Kiệt và Vương cùng làm, không tách (trưởng nhóm xác nhận 05/11).
+> e. **Thay đổi 06/11 (yêu cầu của trưởng nhóm):** (1) Verifier của Hà chỉ so action đã lưu trong dialogue state với plan của Planner và trả ĐÚNG hoặc SAI, SAI thì hỏi thẳng user. (2) Kiệt và Vương phụ trách cải tiến Planner (ra action) và Mapper (bắt đúng lỗi, sửa lỗi). Khánh chỉ còn ASR. Cách soạn câu hỏi user khi Verifier báo SAI chưa chốt (xem mục 9g).
 
 ---
 
@@ -20,7 +21,7 @@ Zalo AI Challenge 2026, bảng **LifeMate**: xây agent nhận giọng nói ti�
 Người dùng nói (giọng vùng miền): "Chuyển cho Lan hai trăm nghìn rồi đặt xe ra sân bay". Agent phải:
 a. Nhận dạng đúng giọng nói, chuẩn hoá phương ngữ, giữ nguyên tên và số tiền.
 b. Nhìn catalog app: có app chuyển tiền và app gọi xe thì lập plan hai call. Nếu có hai người tên Lan hoặc thiếu điểm đón thì gọi `sys.ask_missing_info` và dừng. Nếu không có app nào phù hợp thì nộp `[]`.
-c. Kiểm tra plan (schema, ý định) trước khi chạm vào ToolEnv, vì một write thừa sẽ làm hash lệch.
+c. Kiểm tra plan (schema, so với action đã lưu) trước khi chạm vào ToolEnv, vì một write thừa sẽ làm hash lệch.
 d. Gọi tool qua `zaic_tools` và nộp danh sách call cùng `state_hash`.
 
 ### 1.1 Cách chấm điểm
@@ -91,20 +92,19 @@ gantt
 ```mermaid
 flowchart TD
     A["Audio: lượt mới + history<br/>WAV 16 kHz mono"] --> B["ASR [Khánh]<br/>PhoWhisper-large (HF transformers, PyTorch fp16)<br/>beam search n-best + điểm"]
-    B --> C["Mapper phương ngữ [Khánh]<br/>prompt chạy trong Qwen 4B<br/>từ điển thực thể từ catalog tool"]
-    C --> G{"Entity guard [Khánh]<br/>Python: regex số, giờ, tên"}
+    B --> C["Mapper [Kiệt, Vương]<br/>bắt lỗi và sửa lỗi ASR, phương ngữ<br/>prompt chạy trong Qwen 4B<br/>từ điển thực thể từ catalog tool"]
+    C --> G{"Entity guard [Kiệt, Vương]<br/>Python: regex số, giờ, tên"}
     G -- khớp --> D
     G -- lệch --> C0["Dùng lại hypothesis gốc"] --> D
-    S[("Dialogue state [Kiệt, Vương]<br/>Python dataclass/pydantic<br/>history, slot, action, ngày giờ")] --> D
+    S[("Dialogue state [Kiệt, Vương]<br/>Python dataclass/pydantic<br/>history, slot, action đã lưu, ngày giờ")] --> D
     D["Planner [Kiệt, Vương]<br/>Qwen 4B không vision encoder<br/>structured output theo schema ToolEnv<br/>prompt tối ưu bằng GEPA [Kiệt, Vương]<br/>action = tool_call | ask_user | cannot_answer"]
     D -- cannot_answer --> R["Nộp []"]
-    D -- ask_user --> Q["sys.ask_missing_info, dừng"]
+    D -- ask_user --> Q["Hỏi thẳng user: sys.ask_missing_info, dừng"]
     D -- tool_call --> V1["Schema validator [Kiệt, Vương]<br/>Python: jsonschema/pydantic<br/>so với schema tool của zaic_tools"]
-    V1 -- "lỗi + thông báo cụ thể" --> D
-    V1 -- hợp lệ --> V2["Verifier [Hà]<br/>Laya-multilingual 322M (PyTorch hoặc ONNX Runtime)<br/>ACCEPT | REJECT | ASK + confidence"]
-    V2 -- "REJECT (≤N lần), lý do từ diff bằng code" --> D
-    V2 -- ASK --> Q
-    V2 -- ACCEPT --> F["Executor [Tiên]<br/>zaic_tools, một ToolEnv mỗi mẫu"]
+    V1 -- "lỗi + thông báo cụ thể (≤N lần)" --> D
+    V1 -- hợp lệ --> V2["Verifier [Hà]<br/>Laya-multilingual 322M (PyTorch hoặc ONNX Runtime)<br/>so action đã lưu trong state với plan<br/>chỉ trả ĐÚNG | SAI + confidence"]
+    V2 -- "SAI (lệch diff tính bằng code)" --> Q
+    V2 -- ĐÚNG --> F["Executor [Tiên]<br/>zaic_tools, một ToolEnv mỗi mẫu"]
     F -- "lỗi tool" --> D
     F --> Res["tool_calls + state_hash<br/>submission.jsonl"]
     W["Weight-space programming [Tiên]<br/>model mạnh sửa trọng số Qwen 4B<br/>(thí nghiệm, có điều kiện dừng)"] -. "nếu go" .-> D
@@ -117,19 +117,19 @@ Cột công nghệ là đề xuất khởi điểm, người phụ trách đư�
 | # | Bước | Người | Vào | Ra | Công nghệ và model | Chạy lúc nào |
 |---|---|---|---|---|---|---|
 | 1 | ASR | Khánh | Audio WAV 16 kHz mono (lượt mới và các lượt user trong history) | `ASROut`: n-best 5 hypothesis + điểm | PhoWhisper-large (VinAI, tinh chỉnh từ Whisper, 844 giờ tiếng Việt nhiều giọng), HF `transformers`, PyTorch fp16. Beam search để lấy n-best. Tuỳ chọn tăng tốc: chuyển đổi sang CTranslate2/faster-whisper nếu đo thấy lợi và giữ được n-best | Suy luận (offline) |
-| 2 | Mapper phương ngữ | Khánh | n-best + danh sách thực thể hợp lệ từ catalog | Query tiếng Việt chuẩn | Prompt chạy trên Qwen 4B (không thêm model). Từ điển thực thể (tên người, thiết bị, app) lấy từ catalog tool. Prompt tối ưu bằng GEPA | Suy luận |
-| 3 | Entity guard | Khánh | Query trước và sau rewrite | Query đã kiểm | Python thuần: regex trích số, giờ, tiền, tên. Lệch thì dùng hypothesis gốc | Suy luận |
-| 4 | Dialogue state | Kiệt, Vương (nền chung) | Query chuẩn, history, kết quả tool trước | `state`: slot đã biết, slot thiếu, action đã gọi, ngày giờ hiện tại | Python (dataclass hoặc pydantic). Có chiến lược cắt history để giữ dưới 16.384 token | Suy luận |
-| 5 | Planner | Kiệt, Vương (nền chung) | Query chuẩn, state, danh sách tool | `Plan` (3 nhánh `action`) | Qwen 4B không vision encoder, chạy bằng engine suy luận chọn sau khi đo (HF `transformers` hoặc vLLM, chọn theo tốc độ trên A30 và tính offline). Structured output theo schema ToolEnv bằng thư viện constrained decoding (Outlines, xgrammar hoặc guided decoding của vLLM, chọn khi làm). Greedy, seed cố định. Suy luận tự do rồi mới ép JSON cuối | Suy luận |
+| 2 | Mapper: bắt lỗi, sửa lỗi | Kiệt, Vương (nền chung) | n-best + danh sách thực thể hợp lệ từ catalog | Query tiếng Việt chuẩn | Prompt chạy trên Qwen 4B (không thêm model). Bắt lỗi nhận dạng và từ vùng miền, sửa về đúng thực thể trong catalog (tên người, thiết bị, app). Prompt tối ưu bằng GEPA | Suy luận |
+| 3 | Entity guard | Kiệt, Vương (nền chung) | Query trước và sau rewrite | Query đã kiểm | Python thuần: regex trích số, giờ, tiền, tên. Lệch thì dùng hypothesis gốc | Suy luận |
+| 4 | Dialogue state | Kiệt, Vương (nền chung) | Query chuẩn, history, kết quả tool trước | `state`: slot đã biết, slot thiếu, action đã lưu, ngày giờ hiện tại | Python (dataclass hoặc pydantic). Có chiến lược cắt history để giữ dưới 16.384 token | Suy luận |
+| 5 | Planner (ra action) | Kiệt, Vương (nền chung) | Query chuẩn, state, danh sách tool | `Plan` (3 nhánh `action`) | Qwen 4B không vision encoder, chạy bằng engine suy luận chọn sau khi đo (HF `transformers` hoặc vLLM, chọn theo tốc độ trên A30 và tính offline). Structured output theo schema ToolEnv bằng thư viện constrained decoding (Outlines, xgrammar hoặc guided decoding của vLLM, chọn khi làm). Greedy, seed cố định. Suy luận tự do rồi mới ép JSON cuối | Suy luận |
 | 6 | Schema validator | Kiệt, Vương (nền chung) | `Plan` | Hợp lệ hoặc lỗi cụ thể | Python: `jsonschema` hoặc pydantic, đọc schema từ `zaic_tools`. Kiểm tool tồn tại, tham số bắt buộc, kiểu, enum. Thiếu tham số thì đổi sang `ask_user` | Suy luận |
-| 7 | Verifier | Hà | Query chuẩn, action đã lưu trong state, `Plan` (chuỗi hoá gọn) | `Verdict`: ACCEPT, REJECT hoặc ASK + confidence | Laya-multilingual 322M (Convai Innovations, Apache 2.0, nền mmBERT-base). Câu hỏi dạng choice. Fine-tune bằng PyTorch trên dữ liệu sinh từ train. Chạy PyTorch hoặc ONNX Runtime. Lý do REJECT do hàm diff bằng Python sinh ra | Fine-tune (phát triển), suy luận (offline) |
-| 8 | Executor | Tiên | `Plan` đã ACCEPT | Kết quả tool, `state_hash` | `zaic_tools` do BTC cung cấp. Một ToolEnv mỗi mẫu, ghi lại mọi call đã gọi để đưa vào submission | Suy luận |
+| 7 | Verifier | Hà | Action đã lưu trong state, `Plan` (chuỗi hoá gọn). Không dùng query | `Verdict`: ĐÚNG hoặc SAI + confidence | Laya-multilingual 322M (Convai Innovations, Apache 2.0, nền mmBERT-base). Câu hỏi nhị phân. Fine-tune bằng PyTorch trên dữ liệu sinh từ train. Chạy PyTorch hoặc ONNX Runtime. Chỗ lệch do hàm diff bằng Python chỉ ra, dùng để soạn câu hỏi user | Fine-tune (phát triển), suy luận (offline) |
+| 8 | Executor | Tiên | `Plan` đã ĐÚNG | Kết quả tool, `state_hash` | `zaic_tools` do BTC cung cấp. Một ToolEnv mỗi mẫu, ghi lại mọi call đã gọi để đưa vào submission | Suy luận |
 | 9 | Pipeline và Docker | Tiên | Thư mục mẫu | `submission.jsonl` | Python glue (`pipeline.py`). Docker base có CUDA, cài sẵn trọng số, chạy offline, seed cố định, giới hạn thời gian mỗi mẫu | Suy luận |
 | 10 | Eval harness | Kiệt, Vương (nền chung) | Đầu ra mọi tầng | Điểm cục bộ, lỗi theo tầng, pass^k | Python (`eval/scorer.py`): công thức BTC (hash sai thì 0, đúng thì F1, fuzzy token-F1 > 0,6), chia train theo app | Phát triển |
 | 11 | Dữ liệu synthetic | Kiệt, Vương (nền chung) | Catalog, `zaic_tools` | Bộ test 3 nhãn (đủ, thiếu slot, không có app) | Python, sinh từ catalog public test bằng cách xoá một tham số hoặc xoá tool phù hợp. LLM ngoài chỉ dùng lúc phát triển nếu BTC xác nhận | Phát triển |
 | 12 | Tối ưu prompt | Kiệt, Vương (cùng một module, làm độc lập) | Metric có phản hồi text, tập train và val chia theo app (dùng chung cho cả hai) | Hai bản prompt Planner và Mapper: một của Kiệt, một của Vương | GEPA (`pip install gepa` hoặc `dspy.GEPA`). LLM phản tư là model mạnh, chỉ lúc phát triển. Bắt đầu `auto="light"`. Mỗi người tự chọn cấu hình, seed và hướng tối ưu | Phát triển |
 | 13 | Weight-space programming | Tiên | Qwen 4B, log lỗi, dữ liệu practice | Trọng số Qwen đã sửa hoặc kết luận "bỏ" | Python kernel với PyTorch, model mạnh đọc và sửa tensor trọng số, ngân sách forward pass cố định (blog dùng 50). Theo [RikiyaT](https://rikiyat.github.io/blog/weight-space-programming/) | Phát triển |
-| 14 | Ensemble prompt | Kiệt, Vương (làm chung) | Hai bản prompt đã tối ưu xong | Một cấu hình ensemble đã chốt, hoặc kết luận "giữ bản tốt hơn" | Chỉ làm sau khi cả hai xong. Ứng viên: chạy cả hai prompt rồi chọn plan khớp nhau, dùng Verifier làm trọng tài khi lệch, hoặc đưa cả hai vào một lượt GEPA merge. Phải đo độ trễ vì tốn thêm một lượt gọi Qwen. Chốt cách ghép sau khi có số đo | Phát triển, suy luận (offline) nếu giữ |
+| 14 | Ensemble prompt | Kiệt, Vương (làm chung) | Hai bản prompt đã tối ưu xong | Một cấu hình ensemble đã chốt, hoặc kết luận "giữ bản tốt hơn" | Chỉ làm sau khi cả hai xong. Ứng viên: chạy cả hai prompt rồi chọn plan khớp nhau, dùng Verifier (ĐÚNG hoặc SAI so với state) chọn plan khi lệch, hoặc đưa cả hai vào một lượt GEPA merge. Phải đo độ trễ vì tốn thêm một lượt gọi Qwen. Chốt cách ghép sau khi có số đo | Phát triển, suy luận (offline) nếu giữ |
 
 Các quy ước chung của cả pipeline:
 a. Mọi bước đều đi qua `contracts.py` (mục 4) và ghi log theo mẫu.
@@ -152,7 +152,7 @@ c. Mặc định 2B dư mà Hà nhắc tới không còn khi giữ ASR large. H�
 a. **Jev** (TypeSafe, 15/09/2026) chỉ có API đám mây, không có trọng số mở. Luật cấm gọi API khi chạy, nên **không dùng được**.
 b. **Laya** (Convai Innovations, 18/09/2026, Apache 2.0) là decision model không sinh text: nhận một đoạn text kèm câu hỏi có kiểu (choice, score, yes/no) rồi trả xác suất trong một lượt forward. Có 3 checkpoint: laya 421M (tiếng Anh), laya-multilingual 322M (mmBERT-base, hơn 100 ngôn ngữ), laya-typed-decisions 421M. Ra trước 26/10 nên hợp lệ về mốc thời gian.
 c. **Hai rủi ro cần xử lý ngay:** (1) model card nói base model gần như đoán bừa khi chưa fine-tune, bắt buộc fine-tune; (2) tiếng Việt chưa được xác nhận trong danh sách ngôn ngữ đã test (báo cáo 45 trên 51 ngôn ngữ). Hà phải smoke-test tiếng Việt trong ngày đầu.
-d. Laya chỉ trả nhãn và xác suất, không giải thích. Lý do REJECT gửi lại Planner phải do code sinh ra bằng cách so diff plan với action trong dialogue state.
+d. Laya chỉ trả ĐÚNG hoặc SAI cùng xác suất, không giải thích. Chỗ lệch giữa plan và action trong dialogue state do code diff chỉ ra, dùng để soạn câu hỏi gửi user.
 
 ---
 
@@ -174,7 +174,7 @@ zaic2026-lifemate/
 ├── lifemate/
 │   ├── contracts.py             # schema dữ liệu giữa các module (mục 4)
 │   ├── asr/                     # [Khánh] PhoWhisper, n-best, confidence
-│   ├── mapper/                  # [Khánh] prompt mapper, từ điển thực thể, entity guard
+│   ├── mapper/                  # [Kiệt, Vương] prompt bắt lỗi và sửa lỗi, từ điển thực thể, entity guard
 │   ├── state/                   # [Kiệt, Vương] dialogue state, ngày giờ hiện tại
 │   ├── planner/                 # [Kiệt, Vương] prompt, structured output, vòng lặp
 │   ├── validator/               # [Kiệt, Vương] schema validator bằng code
@@ -202,13 +202,15 @@ Quy ước: mỗi module có `README.md` ngắn (vào, ra, cách chạy, điểm
 ### 3.1 Quy ước nhánh: mỗi người một nhánh, mỗi nhánh chứa module của người đó
 Tên nhánh: `<module>/<tên>`, chữ thường, không dấu. Mỗi người đúng một nhánh dài hạn, tách từ `main`, chỉ chứa và chỉ sửa các module được giao. Commit: `[module] động từ: nội dung`. Tag: `freeze-15-11`, `submit-docker-16-11`.
 
+Nhánh của Khánh đổi từ `asr-mapper/khanh` thành `asr/khanh` vì Mapper chuyển sang Kiệt và Vương.
+
 | Người | Nhánh | Module trong nhánh |
 |---|---|---|
 | Tiên | `integration/tien` | `lifemate/pipeline.py`, `lifemate/executor/`, `lifemate/contracts.py`, `docker/`, `optimize/wsp/`, `configs/`, `scripts/` |
-| Khánh | `asr-mapper/khanh` | `lifemate/asr/`, `lifemate/mapper/` |
+| Khánh | `asr/khanh` | `lifemate/asr/` |
 | Hà | `verifier/ha` | `lifemate/verifier/` |
-| Kiệt | `gepa/kiet` | Thư mục riêng: `optimize/gepa/kiet/`, `prompts/gepa/kiet/`. Nền chung: `lifemate/planner/`, `lifemate/state/`, `lifemate/validator/`, `eval/`, `synth/`, `optimize/gepa/metric/` |
-| Vương | `gepa/vuong` | Thư mục riêng: `optimize/gepa/vuong/`, `prompts/gepa/vuong/`. Nền chung: `lifemate/planner/`, `lifemate/state/`, `lifemate/validator/`, `eval/`, `synth/`. Dùng chung `optimize/gepa/metric/` |
+| Kiệt | `gepa/kiet` | Thư mục riêng: `optimize/gepa/kiet/`, `prompts/gepa/kiet/`. Nền chung: `lifemate/planner/`, `lifemate/mapper/`, `lifemate/state/`, `lifemate/validator/`, `eval/`, `synth/`, `optimize/gepa/metric/` |
+| Vương | `gepa/vuong` | Thư mục riêng: `optimize/gepa/vuong/`, `prompts/gepa/vuong/`. Nền chung: `lifemate/planner/`, `lifemate/mapper/`, `lifemate/state/`, `lifemate/validator/`, `eval/`, `synth/`. Dùng chung `optimize/gepa/metric/` |
 
 Cây thư mục trong nhánh của từng người (chỉ phần của họ, phần còn lại giữ nguyên như `main`):
 
@@ -223,10 +225,9 @@ integration/tien
 ├── configs/             budget.yaml, pipeline.yaml
 └── scripts/             count_params.py, bench_latency.py
 
-asr-mapper/khanh
+asr/khanh
 └── lifemate/
-    ├── asr/             README.md, transcribe.py, nbest.py, bench.py, tests/
-    └── mapper/          README.md, prompt.py, entities.py, guard.py, tests/
+    └── asr/             README.md, transcribe.py, nbest.py, bench.py, tests/
 
 verifier/ha
 └── lifemate/verifier/   README.md, data.py, train.py, infer.py, diff.py, tests/
@@ -243,7 +244,8 @@ gepa/kiet
 │   ├── kiet/            planner_vN.txt, mapper_vN.txt (kèm điểm)   [riêng]
 │   ├── vuong/           [riêng của Vương]
 │   └── ensemble/        [chung, tạo sau khi cả hai xong]
-├── lifemate/planner/, state/, validator/    [nền chung, không tên người]
+├── lifemate/planner/, mapper/, state/, validator/    [nền chung, không tên người]
+│   (mapper/: README.md, prompt.py, entities.py, guard.py, tests/)
 ├── eval/, synth/                            [nền chung]
 
 gepa/vuong: giống gepa/kiet, chỉ khác: sửa `optimize/gepa/vuong/` và `prompts/gepa/vuong/`, dùng chung `optimize/gepa/metric/`.
@@ -259,7 +261,7 @@ d. Gộp vào `main` bằng PR: PR nhỏ, một người review, mô tả PR ghi
 e. Từ 15/11 chỉ nhận PR sửa lỗi, sau tag `freeze-15-11` không đổi model.
 f. Cập nhật nhánh của mình từ `main` mỗi ngày để tránh lệch hợp đồng dữ liệu.
 g. Ngoại lệ duy nhất được commit thẳng lên `main` không qua PR: file `task_flow/<tên>.md` của chính mình (mục 3.2).
-h. Module GEPA chia theo người trong thư mục riêng: `optimize/gepa/kiet/` và `optimize/gepa/vuong/`; `prompts/gepa/kiet/` và `prompts/gepa/vuong/`. Mỗi người chỉ sửa thư mục của mình, người còn lại chỉ đọc. `optimize/gepa/metric/` là nền chung, không có tên người. `optimize/gepa/ensemble/` và `prompts/gepa/ensemble/` do cả hai làm qua một PR chung sau khi xong (mục 5.6). Nền chung (`lifemate/planner/`, `state/`, `validator/`, `eval/`, `synth/`) vẫn chung, ai sửa thì người kia review trước khi gộp.
+h. Module GEPA chia theo người trong thư mục riêng: `optimize/gepa/kiet/` và `optimize/gepa/vuong/`; `prompts/gepa/kiet/` và `prompts/gepa/vuong/`. Mỗi người chỉ sửa thư mục của mình, người còn lại chỉ đọc. `optimize/gepa/metric/` là nền chung, không có tên người. `optimize/gepa/ensemble/` và `prompts/gepa/ensemble/` do cả hai làm qua một PR chung sau khi xong (mục 5.6). Nền chung (`lifemate/planner/`, `mapper/`, `state/`, `validator/`, `eval/`, `synth/`) vẫn chung, ai sửa thì người kia review trước khi gộp.
 
 ### 3.2 Quy trình `task_flow/`: khai báo luồng, ghi note, tick ClickUp
 Mỗi người nhận một task lớn trên ClickUp (list `Task_16/11`), tương ứng mục 5. Cách chia nhỏ việc do từng người tự nghiên cứu và tự quyết định. Để cả nhóm theo dõi được, mỗi người làm theo ba bước:
@@ -299,13 +301,14 @@ ASROut   = {"turns": [{"role": "user", "nbest": [{"text": str, "score": float}]}
 Plan     = {"action": "tool_call|ask_user|cannot_answer",
             "calls": [{"tool": str, "args": dict}],
             "missing": {"tool": str, "params": [str]}}     # khi ask_user
-Verdict  = {"label": "ACCEPT|REJECT|ASK", "confidence": float,
-            "reason": str}                                  # reason do code diff sinh
+Verdict  = {"label": "CORRECT|WRONG", "confidence": float,
+            "diff": [str]}                                  # diff do code sinh, dùng soạn câu hỏi user khi WRONG
 ```
 
 a. `ask_user` khi nộp bài trở thành call `sys.ask_missing_info(tool_name, params)` và là call cuối.
 b. `cannot_answer` khi nộp bài trở thành `[]`.
-c. Mọi module ghi log đầu vào và đầu ra theo mẫu vào `runs/<run_id>/<sample_id>/<module>.json` để `eval/` chấm theo tầng.
+c. `Verdict.label = WRONG` cũng dẫn tới hỏi thẳng user, nộp bằng `sys.ask_missing_info` (cách chọn `tool_name` và `params` xem mục 9g).
+d. Mọi module ghi log đầu vào và đầu ra theo mẫu vào `runs/<run_id>/<sample_id>/<module>.json` để `eval/` chấm theo tầng.
 
 ---
 
@@ -314,10 +317,10 @@ c. Mọi module ghi log đầu vào và đầu ra theo mẫu vào `runs/<run_id>
 | Module | Người | Mục tiêu | Sản phẩm | Điều kiện xong |
 |---|---|---|---|---|
 | Integration, executor, Docker, WSP | **Tiên** | Chạy end to end offline trong 30 giây. Thử làm Planner thông minh hơn bằng sửa trọng số | `pipeline.py`, Docker, báo cáo WSP | Docker chạy offline trên mẫu mẫu, đếm tham số dưới 6B |
-| ASR + Mapper | **Khánh** | Giảm lỗi thực thể và độ trễ ASR | Bảng WER, n-best, mapper + entity guard | Có bảng WER theo giọng và lỗi thực thể, ASR cả hội thoại dưới ngân sách thời gian |
-| Verifier | **Hà** | Verifier dưới 0,4B, nhanh, ít bỏ sót | Laya fine-tune + ngưỡng + diff | Điểm cuối không thấp hơn khi không có Verifier, thêm dưới 100 ms mỗi mẫu |
-| GEPA (bản của Kiệt) + nền chung cùng Vương | **Kiệt** | Một bản prompt tối ưu bằng GEPA, độc lập với Vương. Cùng Vương làm nền: planner, state, validator, eval, synth | `optimize/gepa/kiet/`, `prompts/gepa/kiet/`, `eval/`, `synth/`, nền chung (kèm `optimize/gepa/metric/`) | Scorer cục bộ khớp công thức BTC, prompt của Kiệt có điểm giữ lại cao hơn baseline |
-| GEPA (bản của Vương) + nền chung cùng Kiệt | **Vương** | Một bản prompt tối ưu bằng GEPA, độc lập với Kiệt. Cùng Kiệt làm nền: planner, state, validator, eval, synth | `optimize/gepa/vuong/`, `prompts/gepa/vuong/`, `planner/`, `state/`, `validator/`, nền chung | F1 từng nhãn ổn, plan lỗi cấu trúc gần 0, prompt của Vương có điểm giữ lại cao hơn baseline |
+| ASR | **Khánh** | Giảm lỗi thực thể và độ trễ ASR, đưa n-best cho Mapper | Bảng WER, n-best | Có bảng WER theo giọng và lỗi thực thể, ASR cả hội thoại dưới ngân sách thời gian |
+| Verifier | **Hà** | Verifier dưới 0,4B, nhanh, chỉ trả ĐÚNG hoặc SAI khi so action đã lưu với plan | Laya fine-tune + ngưỡng + diff | Điểm cuối không thấp hơn khi không có Verifier, thêm dưới 100 ms mỗi mẫu |
+| Planner (ra action), Mapper (bắt lỗi, sửa lỗi), GEPA bản của Kiệt + nền chung cùng Vương | **Kiệt** | Cải tiến Planner và Mapper. Một bản prompt tối ưu bằng GEPA, độc lập với Vương. Cùng Vương làm nền: planner, mapper, state, validator, eval, synth | `optimize/gepa/kiet/`, `prompts/gepa/kiet/`, `eval/`, `synth/`, nền chung (kèm `optimize/gepa/metric/`) | Scorer cục bộ khớp công thức BTC, prompt của Kiệt có điểm giữ lại cao hơn baseline |
+| Planner (ra action), Mapper (bắt lỗi, sửa lỗi), GEPA bản của Vương + nền chung cùng Kiệt | **Vương** | Cải tiến Planner và Mapper. Một bản prompt tối ưu bằng GEPA, độc lập với Kiệt. Cùng Kiệt làm nền: planner, mapper, state, validator, eval, synth | `optimize/gepa/vuong/`, `prompts/gepa/vuong/`, `planner/`, `mapper/`, `state/`, `validator/`, nền chung | F1 từng nhãn ổn, plan lỗi cấu trúc gần 0, prompt của Vương có điểm giữ lại cao hơn baseline |
 | Ensemble hai prompt GEPA | **Kiệt và Vương** | Ghép hai bản prompt nếu đo thấy tốt hơn bản đơn | `optimize/gepa/ensemble/`, `prompts/gepa/ensemble/` | Điểm giữ lại ensemble hơn bản đơn tốt nhất, độ trễ còn trong ngân sách 30 giây |
 
 ### 5.1 Tiên: tích hợp và weight-space programming
@@ -332,37 +335,40 @@ c. **Giới hạn đã biết từ blog:** chỉ gỡ chướng ngại, không t
 d. **Go/no-go ngày 13/11:** chỉ giữ nếu điểm cục bộ tăng rõ và không tăng độ trễ. Nếu không, bỏ và dùng model gốc.
 e. **Phải hỏi BTC:** dùng model mạnh bên ngoài để sửa trọng số lúc phát triển có hợp lệ không, và model sau khi sửa có bị tính là "đã public trước 26/10" không. Email: aichallenge@zalo.me.
 
-### 5.2 Khánh: ASR và Mapper
+### 5.2 Khánh: ASR
 a. Đo WER của PhoWhisper small, medium, large trên audio train (đối chiếu `audio_text`), tách theo giọng vùng miền. Đo thêm lỗi thực thể (tên người, số tiền, giờ).
-b. Xuất n-best 5 hypothesis bằng beam search kèm điểm.
+b. Xuất n-best 5 hypothesis bằng beam search kèm điểm, đưa cho Mapper của Kiệt và Vương qua `ASROut`.
 c. Đo tốc độ trên GPU gần A30. Chỉ chạy ASR một lần cho mỗi audio, cache theo hash audio, gom batch cho lịch sử 24 lượt.
-d. Mapper: prompt chuẩn hoá phương ngữ chạy trong lượt gọi Planner. Từ điển thực thể lấy từ catalog tool. Entity guard bằng code: số, giờ, tên còn nguyên sau rewrite, lệch thì dùng lại hypothesis gốc.
-e. Ablation 3 cấu hình: không Mapper, Mapper cũ, Mapper mới. So điểm cuối, không chỉ WER.
+d. Ablation: chỉ dùng 1 transcript so với n-best, so điểm cuối (phối hợp với Kiệt và Vương vì cần Mapper chạy).
 
-### 5.3 Hà: Verifier bằng Laya
+### 5.3 Hà: Verifier bằng Laya (chỉ trả ĐÚNG hoặc SAI)
 a. **Ngày đầu:** smoke-test `laya-multilingual` trên câu tiếng Việt có dấu và giọng vùng miền. Báo kết quả cho cả nhóm. Nếu tiếng Việt kém, chuyển sang phương án d.
-b. Bài toán: input là query chuẩn, danh sách action đã lưu trong dialogue state và plan. Câu hỏi dạng choice: `ACCEPT | REJECT | ASK`.
-c. Dữ liệu fine-tune sinh từ train: plan gold là ACCEPT. Sửa tên tool, đổi một tham số, bỏ một call, thêm call thừa thì REJECT. Xoá một tham số bắt buộc thì ASK. Chia theo app để kiểm tra khái quát.
+b. Bài toán: input là danh sách action đã lưu trong dialogue state và plan của Planner (không có query). Laya so sánh và chỉ trả ĐÚNG hoặc SAI. Câu hỏi dạng nhị phân.
+c. Dữ liệu fine-tune sinh từ train: plan khớp state và gold là ĐÚNG. Sửa tên tool, đổi một tham số, bỏ một call, thêm call thừa thì SAI. Không còn nhãn ASK. Chia theo app để kiểm tra khái quát.
 d. Phương án dự phòng theo thứ tự: (1) verifier bằng luật + diff trong code, (2) Planner tự kiểm một lượt thứ hai, (3) hạ ASR để lấy tham số cho LLM nhỏ.
-e. Chọn ngưỡng confidence trên tập dev: dưới ngưỡng thì chuyển ACCEPT hay ASK phải đo bằng đường cong điểm. Không chỉnh ngưỡng trên tập kiểm chứng cuối.
+e. Chọn ngưỡng confidence trên tập dev: dưới ngưỡng thì coi ĐÚNG hay SAI phải đo bằng đường cong điểm (SAI nhầm làm hỏi user thừa, bỏ sót SAI làm lọt call sai). Không chỉnh ngưỡng trên tập kiểm chứng cuối.
 f. Xuất ONNX hoặc chạy PyTorch, đo độ trễ. Laya công bố khoảng 33 ms trên T4 cho một câu hỏi.
-g. Xuất reason bằng code (diff giữa plan và action trong state) để Planner có phản hồi cụ thể.
+g. Viết hàm diff bằng code (so plan với action trong state) để chỉ ra chỗ lệch. Kết quả dùng soạn câu hỏi gửi user khi SAI.
+h. **Giới hạn đã biết:** vì không có query, Laya chỉ phát hiện lệch so với lịch sử (trùng call, mâu thuẫn action cũ, thiếu hoặc thừa so với state). Plan sai ý user nhưng nhất quán với state sẽ không bị bắt. Phần đó do Planner và GEPA lo.
 
-### 5.4 Kiệt: harness, dữ liệu synthetic, metric GEPA
+### 5.4 Kiệt: Planner, Mapper, harness, dữ liệu synthetic, metric GEPA
 a. `eval/scorer.py` cài đúng công thức mục 1.1, kiểm tra trên nhãn train. Chạy được ToolEnv qua `zaic_tools` và so `state_hash`.
 b. Chia train theo app (train 80 phần trăm app, giữ 20 phần trăm app lạ) vì app test khác train.
 c. Log từng tầng, báo cáo lỗi theo tầng: ASR, Mapper, Planner, Validator, Verifier.
 d. Chạy mỗi mẫu k lần để đo pass^k (độ ổn định).
 e. `synth/`: sinh bộ test 3 nhãn (đủ thông tin, thiếu slot, không có app) từ catalog của public test (luật cho phép dùng catalog và `zaic_tools` để sinh dữ liệu). Không gán nhãn cho audio hay request của test.
 f. **Metric GEPA:** hàm trả điểm kèm text phản hồi (diff call sai, call thừa, nhầm ask với `[]`, lỗi hash) để LLM phản tư đọc được. Metric nằm trong `optimize/gepa/metric/`, là nền chung của Kiệt và Vương. Cả hai cùng dùng để chấm cùng thước. Ai đổi metric thì người kia review trước khi gộp.
-g. **GEPA của riêng Kiệt:** chạy độc lập với Vương trên cùng module (prompt Planner và Mapper), kết quả vào `prompts/gepa/kiet/`.
+g. **Planner (ra action), nền chung với Vương:** cải tiến để ra đúng `action` (gọi tool, hỏi lại, từ chối) và đúng chuỗi call.
+h. **Mapper (bắt lỗi, sửa lỗi), nền chung với Vương:** prompt bắt lỗi nhận dạng và từ vùng miền từ n-best, sửa về đúng thực thể trong catalog, entity guard bằng code (số, giờ, tên còn nguyên, lệch thì dùng hypothesis gốc). Ablation 3 cấu hình: không Mapper, Mapper cũ, Mapper mới, so điểm cuối chứ không chỉ WER.
+i. **GEPA của riêng Kiệt:** chạy độc lập với Vương trên cùng module (prompt Planner và Mapper), kết quả vào `prompts/gepa/kiet/`.
 
-### 5.5 Vương: Planner, state, validator, GEPA
+### 5.5 Vương: Planner, Mapper, state, validator, GEPA
 a. Baseline Planner (Qwen ≤4B instruct): JSON có `action`, structured output, cho suy luận trước rồi mới ép schema.
-b. `state/`: lịch sử lượt, slot đã biết, ngày giờ hiện tại, action đã gọi.
+b. `state/`: lịch sử lượt, slot đã biết, ngày giờ hiện tại, action đã lưu. Dữ liệu action đã lưu này là input của Verifier.
 c. `validator/`: tool tồn tại, đủ tham số bắt buộc, đúng kiểu và enum. Lỗi trả về Planner kèm thông báo cụ thể. Thiếu tham số thì chuyển sang `ask_user`, không bịa.
 d. Giữ Planner dưới 16.384 token kể cả lịch sử. Có chiến lược cắt lịch sử.
-e. **GEPA của riêng Vương:** chạy ([dspy.GEPA](https://dspy.ai/api/optimizers/GEPA) hoặc gói `gepa`) trên prompt Planner và Mapper, độc lập với Kiệt, dùng metric chung trong `optimize/gepa/metric/`. Kết quả vào `prompts/gepa/vuong/`.
+e. **Planner (ra action) và Mapper (bắt lỗi, sửa lỗi), nền chung với Kiệt:** cùng cải tiến như mục 5.4g và 5.4h.
+f. **GEPA của riêng Vương:** chạy ([dspy.GEPA](https://dspy.ai/api/optimizers/GEPA) hoặc gói `gepa`) trên prompt Planner và Mapper, độc lập với Kiệt, dùng metric chung trong `optimize/gepa/metric/`. Kết quả vào `prompts/gepa/vuong/`.
 
 ### 5.6 GEPA (Kiệt và Vương cùng làm một module, độc lập rồi ensemble)
 Hai người **cùng làm một module**: tối ưu prompt Planner và Mapper bằng GEPA. Mỗi người chạy riêng, ra một bản prompt riêng. Sau khi cả hai xong thì ensemble hai bản đó. Không chia module thành hai phần.
@@ -373,8 +379,8 @@ c. Bắt đầu bằng `auto="light"`. Tập train và val chia theo app.
 d. Theo dõi riêng điểm trên nhóm đủ thông tin để GEPA không tối ưu thành "hỏi lại cho an toàn".
 e. Chỉ nhận prompt mới khi điểm giữ lại tăng so với baseline.
 f. **Để hai bản độc lập và so sánh được:** dùng chung metric, chung baseline, chung cách chia train và val theo app, chung tập giữ lại. Khác nhau ở cấu hình GEPA, seed, prompt khởi đầu hoặc LLM phản tư do mỗi người tự chọn. Không xem prompt của nhau trước khi cả hai chốt.
-g. **Ensemble (sau khi cả hai xong, dự kiến 13 đến 14/11):** làm chung, thư mục `optimize/gepa/ensemble/`, PR chung vào `main`. Cách ghép chốt theo số đo. Ứng viên: (1) chạy cả hai prompt rồi chọn plan khớp nhau, lệch thì để Verifier phân xử; (2) đưa cả hai vào một vòng GEPA merge; (3) giữ bản đơn tốt hơn nếu ensemble không hơn rõ. Ensemble tốn thêm một lượt gọi Qwen mỗi mẫu, nên phải đo độ trễ so với trần 30 giây.
-h. **Thư mục GEPA riêng từng người:** `optimize/gepa/kiet/`, `optimize/gepa/vuong/`, `prompts/gepa/kiet/`, `prompts/gepa/vuong/`. Mỗi người chỉ sửa thư mục của mình. **Nền chung** (planner, state, validator, eval, synth, metric) vẫn dùng chung, ai sửa thì người kia review trước khi gộp vào `main`.
+g. **Ensemble (sau khi cả hai xong, dự kiến 13 đến 14/11):** làm chung, thư mục `optimize/gepa/ensemble/`, PR chung vào `main`. Cách ghép chốt theo số đo. Ứng viên: (1) chạy cả hai prompt rồi chọn plan khớp nhau, lệch thì để Verifier chọn plan nào ĐÚNG so với state; (2) đưa cả hai vào một vòng GEPA merge; (3) giữ bản đơn tốt hơn nếu ensemble không hơn rõ. Ensemble tốn thêm một lượt gọi Qwen mỗi mẫu, nên phải đo độ trễ so với trần 30 giây.
+h. **Thư mục GEPA riêng từng người:** `optimize/gepa/kiet/`, `optimize/gepa/vuong/`, `prompts/gepa/kiet/`, `prompts/gepa/vuong/`. Mỗi người chỉ sửa thư mục của mình. **Nền chung** (planner, mapper, state, validator, eval, synth, metric) vẫn dùng chung, ai sửa thì người kia review trước khi gộp vào `main`.
 
 ---
 
@@ -409,11 +415,13 @@ Mỗi người có thể nộp thử public test 5 lần mỗi ngày: dành 1 l�
 | R7 | WSP không giúp hoặc vi phạm luật | Time-box đến 13/11, hỏi BTC, bỏ nếu không rõ |
 | R8 | Cho ra kết quả không tái lập | Seed cố định, greedy, chạy lại kiểm tra |
 | R9 | Rò rỉ dữ liệu | `data/` trong `.gitignore`, repo private, không chia sẻ ngoài nhóm |
+| R10 | Verifier báo SAI nhầm nên hỏi user thừa (không còn vòng retry Planner) | Chọn ngưỡng trên tập dev, theo dõi tỉ lệ hỏi thừa trên nhóm đủ thông tin |
+| R11 | Verifier không bắt được plan sai ý user vì không có query | Planner và GEPA chịu trách nhiệm đúng ý, đo F1 từng nhãn |
 
 ---
 
 ## 8. Quy trình làm việc
-a. Mỗi người một nhánh theo mục 3.1 (`integration/tien`, `asr-mapper/khanh`, `verifier/ha`, `gepa/kiet`, `gepa/vuong`), PR nhỏ vào `main`, một người review.
+a. Mỗi người một nhánh theo mục 3.1 (`integration/tien`, `asr/khanh`, `verifier/ha`, `gepa/kiet`, `gepa/vuong`), PR nhỏ vào `main`, một người review.
 b. Họp 15 phút mỗi ngày: hôm qua xong gì, hôm nay làm gì, đang vướng gì. Mỗi người đã cập nhật `task_flow/<tên>.md` và tick subtask trong task "Start luồng" trước buổi họp (mục 3.2).
 c. Mọi con số báo cáo dùng điểm của `eval/scorer.py` trên tập giữ lại chia theo app.
 d. Mọi thay đổi model hay prompt kèm một dòng trong `docs/DECISIONS.md`: thay gì, điểm trước và sau, độ trễ.
@@ -425,6 +433,7 @@ c. Model đã sửa trọng số có phù hợp quy định "public trước 26/
 d. Số lần nộp Docker (nguồn thứ cấp nói 2) và đóng băng trước 20/11.
 e. Cách tính tham số: có tính embedding và các phần phụ không.
 f. Khai báo giấy phép: Qwen, PhoWhisper, Laya cần giấy phép cho dùng thương mại. Gửi hồ sơ nguồn gốc trước 16/11.
+g. **Nội bộ nhóm, cần chốt:** khi Verifier báo SAI và hỏi thẳng user, nộp `sys.ask_missing_info` với `tool_name` và `params` lấy từ đâu (gợi ý: tool của call bị lệch trong plan và các tham số mà diff chỉ ra). Vì call này được chấm như tool thường, chỗ này ảnh hưởng điểm.
 
 ## 10. Nguồn
 - [Trang cuộc thi](https://challenge.zalo.ai/) và [Thể lệ PDF](https://dl-challenge.zalo.ai/zalo-ai-challenge-regulations-en.pdf)

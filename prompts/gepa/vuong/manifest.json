@@ -1,0 +1,11 @@
+{
+  "baseline_v0": {
+    "file": "planner_v0.txt",
+    "mean_score": 0.3117,
+    "act": 0.3268,
+    "ask": 0.0810,
+    "empty": 0.5909,
+    "avg_latency_s": 31.4,
+    "notes": "Original prompt in pipeline.py with verify_rounds=2"
+  }
+}

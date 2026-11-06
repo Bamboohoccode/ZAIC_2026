@@ -446,11 +446,15 @@ def main():
     ap.add_argument("--verify-rounds", type=int, default=VERIFY_ROUNDS)
     ap.add_argument("--text", action="store_true", help="use audio_text instead of ASR (train only)")
     ap.add_argument("--ids", help="path to a text file with IDs to run (e.g. eval/splits/dev_ids.txt)")
+    ap.add_argument("--prompt", help="path to custom system prompt template file")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args()
     gold = a.llm == "gold"
     rounds = 0 if gold else a.verify_rounds
+    global SYSTEM
+    if a.prompt:
+        SYSTEM = open(a.prompt, encoding="utf-8").read()
 
     os.environ.setdefault("VLLM_ENABLE_V1_MULTIPROCESSING", "0")  # in-process engine: reproducible, freeable
     random.seed(a.seed)

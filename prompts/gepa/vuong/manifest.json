@@ -28,11 +28,11 @@
   },
   "planner_v2": {
     "file": "planner_v2.txt",
-    "mean_score": null,
-    "act": null,
-    "ask": null,
-    "empty": null,
-    "avg_latency_s": null,
-    "notes": "Minimal arguments rule (ban auto-filling repeat/note/dates), chaining unit conversions to action names (e.g. 300 cm rope). Ready for Kaggle run."
+    "mean_score": 0.3436,
+    "act": 0.3665,
+    "ask": 0.0854,
+    "empty": 0.5909,
+    "avg_latency_s": 29.62,
+    "notes": "Minimal arguments rule reduced WRONG_TOOL_OR_ARGS from 53 down to 41 (-22.6%). Act F1 0.3665, Empty F1 0.5909. However, ask recall fell back to 0.0854 due to over-aggressive write priority over disambiguation."
   }
 }

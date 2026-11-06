@@ -7,5 +7,23 @@
     "empty": 0.5909,
     "avg_latency_s": 31.4,
     "notes": "Original prompt in pipeline.py with verify_rounds=2"
+  },
+  "baseline_no_verify": {
+    "file": "planner_v0.txt",
+    "mean_score": 0.3109,
+    "act": 0.3304,
+    "ask": 0.0786,
+    "empty": 0.5455,
+    "avg_latency_s": 24.34,
+    "notes": "Ablation: verify_rounds=0 (-6.6s latency, F1 equivalent)"
+  },
+  "planner_v1": {
+    "file": "planner_v1.txt",
+    "mean_score": 0.3523,
+    "act": 0.3659,
+    "ask": 0.1989,
+    "empty": 0.5000,
+    "avg_latency_s": 27.05,
+    "notes": "Rules for write after read, slot ambiguity ask, and self-cancellation. Ask F1 jumped 0.0810->0.1989 (+145%), Mean F1 +0.0406"
   }
 }

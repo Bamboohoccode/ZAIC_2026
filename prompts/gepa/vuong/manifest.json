@@ -25,5 +25,14 @@
     "empty": 0.5000,
     "avg_latency_s": 27.05,
     "notes": "Rules for write after read, slot ambiguity ask, and self-cancellation. Ask F1 jumped 0.0810->0.1989 (+145%), Mean F1 +0.0406"
+  },
+  "planner_v2": {
+    "file": "planner_v2.txt",
+    "mean_score": null,
+    "act": null,
+    "ask": null,
+    "empty": null,
+    "avg_latency_s": null,
+    "notes": "Minimal arguments rule (ban auto-filling repeat/note/dates), chaining unit conversions to action names (e.g. 300 cm rope). Ready for Kaggle run."
   }
 }

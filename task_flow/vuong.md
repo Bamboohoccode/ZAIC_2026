@@ -21,8 +21,8 @@ Nhánh: `planner/vuong` (hoặc `gepa/vuong`). Hạn: đóng băng 15/11, nộp 
 | # | Bước | Hạn | Điều kiện xong | Trạng thái |
 |---|---|---|---|---|
 | 1 | Tạo `eval/splits/dev_ids.txt` (chia theo app) + script chạy dev + báo điểm act/ask/empty | 06/11 | `dev_ids.txt` (300 mẫu, 9 held-out apps), `scorer.py` chẩn đoán chi tiết, `pipeline.py --ids` chạy được | **[XONG 06/11]** |
-| 2 | Baseline Qwen3-4B trên Kaggle GPU: chạy `--text --ids eval/splits/dev_ids.txt`, lưu trace | 07/11 | Có file `runs/dev_baseline.jsonl` + điểm F1 baseline + latency ghi vào `docs/DECISIONS.md` | **Đang tiến hành** (Tạo notebook Kaggle) |
-| 3 | Phân nhóm lỗi (script chẩn đoán): sai tool, sai tham số, read thừa, thiếu ask, ask thay vì làm, lệch hash | 07/11 | Bảng thống kê % lỗi theo nhóm từ kết quả Bước 2 | Kế tiếp sau Bước 2 |
+| 2 | Baseline Qwen3-4B trên Kaggle GPU: chạy `--text --ids eval/splits/dev_ids.txt`, lưu trace | 07/11 | Có file `runs/dev_baseline.jsonl` + điểm F1 baseline + latency ghi vào `docs/DECISIONS.md` | **[XONG 06/11]** F1: 0.3117 (Act: 0.3268, Ask: 0.0810, Empty: 0.5909), latency: 31.4s |
+| 3 | Phân nhóm lỗi (script chẩn đoán): sai tool, sai tham số, read thừa, thiếu ask, ask thay vì làm, lệch hash | 07/11 | Bảng thống kê % lỗi theo nhóm từ kết quả Bước 2 | **[XONG 06/11]** Hash mismatch: 46.3%, Wrong tool/args: 17.3%, 130 mẫu > 30s |
 | 4 | Refactor module: `lifemate/planner`, `lifemate/state`, `lifemate/validator` | 08/11 | Unit test pass, điểm dev không đổi sau khi tách | *Tạm dừng chờ Tiên & Kiệt chốt phân chia chi tiết* |
 | 5 | Nâng cấp Validator luật 2 tầng: feedback loop + auto fallback `sys.ask_missing_info` | 09/11 | Điểm dev tăng, tỉ lệ call lỗi schema về 0 | *Tạm dừng chờ Kiệt thống nhất nền chung* |
 | 6 | Ablation Verify Rounds: đo Planner thuần túy (`verify_rounds=0`) vs `verify_rounds=2` | 10/11 | Đo latency và F1; bàn giao kết quả làm baseline sạch cho Laya của Hà | Sẵn sàng đo sau Bước 2 |
@@ -45,3 +45,4 @@ Nhánh: `planner/vuong` (hoặc `gepa/vuong`). Hạn: đóng băng 15/11, nộp 
 - 05/11: Đọc đề + repo, chốt D1 đến D6, chuyển dữ liệu vào `data/`, replay gold 100 mẫu = 1.0.
 - 06/11: Xong Subtask 1: sinh `eval/splits/dev_ids.txt` (300 mẫu, giữ 9 app lạ), cập nhật `eval/scorer.py` hỗ trợ chẩn đoán chi tiết theo `act`/`ask`/`empty`, thêm cờ `--ids` vào `lifemate/pipeline.py`.
 - 06/11 (sáng): Đồng bộ commit `update_4_flow` & `update_5_flow` từ Tiên: Cập nhật lại lộ trình subtask, tạm dừng các phần refactor chờ chốt phân công, chuẩn bị Kaggle notebook chạy Baseline Bước 2.
+- 06/11 (trưa): Chạy thành công Baseline Qwen3-4B trên Kaggle (300 mẫu dev). Hoàn thành Bước 2 & Bước 3: Điểm F1 đạt 0.3117 (Act: 0.3268, Ask: 0.0810, Empty: 0.5909). Thống kê lỗi: 46.3% lệch hash, 17.3% sai tool/args, 130/300 mẫu vượt 30s do self-verify 2 lượt. Ghi nhật ký vào docs/DECISIONS.md.

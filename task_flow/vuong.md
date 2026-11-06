@@ -1,7 +1,7 @@
-# [Vương] Luồng làm việc: Planner, state, validator, GEPA
+# [Vương] Luồng làm việc: Planner, Mapper, State, Validator, GEPA
 
-Phạm vi (ClickUp): `lifemate/planner/`, `lifemate/state/`, `lifemate/validator/`, `optimize/gepa/run/`, `prompts/gepa/`.
-Nhánh: `planner/vuong`. Hạn: đóng băng 15/11, nộp Docker 16/11 23:59.
+Phạm vi (ClickUp & update_5_flow): Nền chung cùng Kiệt (`lifemate/planner/`, `lifemate/mapper/`, `lifemate/state/`, `lifemate/validator/`, `eval/`, `synth/`, `optimize/gepa/metric/`). Thư mục riêng: `optimize/gepa/vuong/`, `prompts/gepa/vuong/`.
+Nhánh: `planner/vuong` (hoặc `gepa/vuong`). Hạn: đóng băng 15/11, nộp Docker 16/11 23:59.
 
 ## Quyết định đã chốt (05/11)
 | # | Quyết định | Lý do |
@@ -38,4 +38,5 @@ Số liệu train: 1.545 mẫu (act 1.217, ask 217, empty 111), trung bình 2,3 
 
 ## Nhật ký
 - 05/11: Đọc đề + repo, chốt D1 đến D6, chuyển dữ liệu vào `data/`, replay gold 100 mẫu = 1.0.
-- 06/11: Xong Subtask 1: sinh `eval/splits/dev_ids.txt` (300 mẫu, giữ 9 app lạ), cập nhật `eval/scorer.py` hỗ trợ chẩn đoán chi tiết theo `act`/`ask`/`empty`, thêm cờ `--ids` vào `lifemate/pipeline.py`. Đồng bộ sạch sẽ với `update_3_flow` của Tiên.
+- 06/11: Xong Subtask 1: sinh `eval/splits/dev_ids.txt` (300 mẫu, giữ 9 app lạ), cập nhật `eval/scorer.py` hỗ trợ chẩn đoán chi tiết theo `act`/`ask`/`empty`, thêm cờ `--ids` vào `lifemate/pipeline.py`.
+- 06/11: Nhận cập nhật từ trưởng nhóm Tiên (`update_4_flow` & `update_5_flow`): Vương & Kiệt phụ trách nền chung gồm Planner + Mapper (bắt lỗi, sửa lỗi ASR & phương ngữ) + State + Validator. Khánh phụ trách ASR + Entity guard. Verifier của Hà đổi thành so action đã lưu với plan, nếu SAI thì hỏi thẳng user.

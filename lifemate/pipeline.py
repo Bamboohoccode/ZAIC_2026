@@ -441,6 +441,7 @@ def main():
     ap.add_argument("--llm-lora")
     ap.add_argument("--gpu-mem", type=float, default=0.7, help="main LLM gpu_memory_utilization")
     ap.add_argument("--mapper-gpu-mem", type=float, default=0.1, help="mapper gpu_memory_utilization")
+    ap.add_argument("--max-ctx", type=int, default=MAX_CTX, help="max model sequence length (context)")
     ap.add_argument("--eager", action="store_true", help="vLLM enforce_eager: skip CUDA graphs (slower, avoids capture errors)")
     ap.add_argument("--verify-rounds", type=int, default=VERIFY_ROUNDS)
     ap.add_argument("--text", action="store_true", help="use audio_text instead of ASR (train only)")
@@ -479,7 +480,7 @@ def main():
     itn = load_itn(a.itn, a.itn_device) if a.itn else None
     m_args = (a.mapper, a.mapper_lora, a.mapper_gpu_mem, a.seed, 2048, 256, {"enable_thinking": False}, a.eager)
     mapper = None if a.mapper == "none" or gold else RemoteVLLM(a.mapper_device, *m_args) if a.mapper_device else VLLM(*m_args)
-    llm = GoldLLM() if gold else VLLM(a.llm, a.llm_lora, a.gpu_mem, a.seed, MAX_CTX, MAX_NEW, None, a.eager)
+    llm = GoldLLM() if gold else VLLM(a.llm, a.llm_lora, a.gpu_mem, a.seed, a.max_ctx, MAX_NEW, None, a.eager)
     slow = []
     with open(a.out, "w", encoding="utf-8") as fout, open(a.out + ".trace.jsonl", "w", encoding="utf-8") as ftr:
         for i, item in enumerate(items):
@@ -497,7 +498,7 @@ def main():
                 tools = tool_specs(item, catalog)
                 keep = len(texts) - 1
                 msgs = build_messages(item, texts, keep)
-                while keep and llm.n_tokens(msgs, tools) > MAX_CTX - MAX_NEW * 2:
+                while keep and llm.n_tokens(msgs, tools) > a.max_ctx - MAX_NEW * 2:
                     keep -= 1
                     msgs = build_messages(item, texts, keep)
                 if gold:

@@ -24,7 +24,7 @@
     "ask": 0.1989,
     "empty": 0.5000,
     "avg_latency_s": 27.05,
-    "notes": "Rules for write after read, slot ambiguity ask, and self-cancellation. Ask F1 jumped 0.0810->0.1989 (+145%), Mean F1 +0.0406 (Current Best Overall)"
+    "notes": "Rules for write after read, slot ambiguity ask, and self-cancellation. Ask F1 jumped 0.0810->0.1989 (+145%), Mean F1 +0.0406"
   },
   "planner_v2": {
     "file": "planner_v2.txt",
@@ -33,7 +33,7 @@
     "ask": 0.0854,
     "empty": 0.5909,
     "avg_latency_s": 29.62,
-    "notes": "Minimal arguments rule reduced WRONG_TOOL_OR_ARGS from 53 down to 41 (-22.6%). Act F1 0.3665 (Highest Act)."
+    "notes": "Minimal arguments rule reduced WRONG_TOOL_OR_ARGS from 53 down to 41 (-22.6%)."
   },
   "planner_v3": {
     "file": "planner_v3.txt",
@@ -46,11 +46,11 @@
   },
   "planner_v4": {
     "file": "planner_v4.txt",
-    "mean_score": null,
-    "act": null,
-    "ask": null,
-    "empty": null,
-    "avg_latency_s": null,
-    "notes": "Minimal Surgery on planner_v1: Exact 33-line core of v1 (retaining Ask F1 0.1989) + exactly 1 line constraint on minimal arguments (banning auto-filling repeat/note). Ready for Kaggle run."
+    "mean_score": 0.3597,
+    "act": 0.3831,
+    "ask": 0.1314,
+    "empty": 0.5455,
+    "avg_latency_s": 28.01,
+    "notes": "Minimal Surgery on planner_v1: All-time high Mean F1 0.3597 (+0.0480 vs baseline) and Act F1 0.3831. Missed ask dropped to 8 (2.7%). Net +22 samples improved vs baseline. (CURRENT CHAMPION PROMPT)"
   }
 }

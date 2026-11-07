@@ -52,7 +52,7 @@ from lifemate.pipeline import (
 from lifemate.validator.validator import validate_and_guard_calls
 
 
-def plan_step(llm, msgs, tools, trace, rounds, deadline, system_prompt, max_ctx=MAX_CTX):
+def plan_step(llm, msgs, tools, trace, rounds, deadline, system_prompt, max_ctx=MAX_CTX, log_msg=None):
     """Planner proposes the next calls; verifier ACCEPTs or REJECTs with a reason, at most `rounds` times."""
     query = msgs[-1]["content"] if msgs[-1]["role"] == "user" else next(m["content"] for m in reversed(msgs) if m["role"] == "user")
     feedback = []
@@ -71,9 +71,18 @@ def plan_step(llm, msgs, tools, trace, rounds, deadline, system_prompt, max_ctx=
             break
 
     for attempt in range(rounds + 1):
+        n_toks = llm.n_tokens(safe_msgs + feedback, tools)
+        t_call0 = time.time()
+        if log_msg:
+            log_msg(f"    -> [LLM Chat] msgs={len(safe_msgs)} input_tokens={n_toks} calling vLLM...")
         out = llm.chat([safe_msgs + feedback], tools)[0]
+        dt_llm = time.time() - t_call0
         trace.append({"plan": out})
         calls = parse_calls(out)
+        call_names = [c["name"] for c in calls]
+        first_line = out.strip().split("\n")[0][:90] if out.strip() else ""
+        if log_msg:
+            log_msg(f"    -> [LLM Output in {dt_llm:.1f}s] calls={call_names} | preview: {first_line}")
         if not calls or attempt == rounds or time.time() > deadline:
             return out, calls
         shown = "\n".join(f"<tool_call>{json.dumps(c, ensure_ascii=False)}</tool_call>" for c in calls)
@@ -82,27 +91,43 @@ def plan_step(llm, msgs, tools, trace, rounds, deadline, system_prompt, max_ctx=
         trace.append({"verify": verdict})
         if ok:
             return out, calls
+        if log_msg:
+            log_msg(f"    -> [Verifier REJECT] {reason}")
         feedback = [{"role": "assistant", "content": out}, {"role": "user", "content": REPLAN.format(reason=reason)}]
 
 
-def run_agent(env, llm, msgs, tools, catalog, trace, system_prompt, rounds=VERIFY_ROUNDS, deadline=float("inf"), max_ctx=MAX_CTX):
+def run_agent(env, llm, msgs, tools, catalog, trace, system_prompt, rounds=VERIFY_ROUNDS, deadline=float("inf"), max_ctx=MAX_CTX, log_msg=None):
     done = set()
-    for _ in range(MAX_STEPS):
+    for step_i in range(MAX_STEPS):
+        time_left = max(0.0, deadline - time.time())
         if time.time() > deadline:
             trace.append({"error": "time limit"})
+            if log_msg:
+                log_msg(f"  [Timeout] Deadline reached (>120s) -> Stopping agent early.")
             return
-        out, calls = plan_step(llm, msgs, tools, trace, rounds, deadline, system_prompt, max_ctx=max_ctx)
+        if log_msg:
+            log_msg(f"  [Step {step_i + 1}/{MAX_STEPS}] time_left={time_left:.1f}s")
+        out, calls = plan_step(llm, msgs, tools, trace, rounds, deadline, system_prompt, max_ctx=max_ctx, log_msg=log_msg)
         if not calls:
+            if log_msg:
+                log_msg(f"  [Step {step_i + 1}] No tool calls -> Agent finished.")
             return
         query = msgs[-1]["content"] if msgs[-1]["role"] == "user" else next((m["content"] for m in reversed(msgs) if m["role"] == "user"), "")
         # Apply Safe Hash Guard & Schema Validator
+        orig_names = [c["name"] for c in calls]
         calls = validate_and_guard_calls(calls, catalog, msgs, query)
+        guarded_names = [c["name"] for c in calls]
+        if orig_names != guarded_names and log_msg:
+            log_msg(f"    -> [Safe Hash Guard] {orig_names} -> {guarded_names}")
         if not calls:
+            if log_msg:
+                log_msg(f"    -> [Safe Hash Guard] Filtered calls to empty -> Agent finished.")
             return
         ai = len(msgs)
         msgs.append(assistant_msg(re.sub(r"<tool_call>.*?</tool_call>", "", out, flags=re.S).strip(), calls))
         stop = False
         for c in calls:
+            t_exec0 = time.time()
             key = json.dumps(c, sort_keys=True, ensure_ascii=False)
             v = env.validate(c["name"], c["arguments"])
             bad = v.get("ok") and unseen_ids(c, catalog, msgs[:ai] + msgs[ai + 1:])
@@ -117,8 +142,14 @@ def run_agent(env, llm, msgs, tools, catalog, trace, system_prompt, rounds=VERIF
                 r = env.call(c["name"], c["arguments"])
                 done.add(key)
                 stop |= c["name"] == "sys.ask_missing_info"
+            dt_exec = time.time() - t_exec0
+            status = "OK" if r.get("ok", True) else f"ERR: {str(r.get('error', ''))[:40]}"
+            if log_msg:
+                log_msg(f"    -> [Tool Exec] {c['name']} in {dt_exec:.2f}s -> {status}")
             msgs.append({"role": "tool", "content": clip(r)})
         if stop:
+            if log_msg:
+                log_msg(f"  [Step {step_i + 1}] Stop requested (sys.ask_missing_info called).")
             return
 
 
@@ -253,7 +284,6 @@ def main():
             if a.resume and item["id"] in done_ids:
                 continue
 
-            log_msg(f"[{i + 1}/{len(items)}] {item['id']} START...")
             t0 = time.time()
             deadline = t0 + 120
             env = ToolEnv(a.split, item["id"], root=str(root))
@@ -263,15 +293,19 @@ def main():
                 raw = [u["audio_text"] for u in turns] if a.text else run_asr(asr, [root / a.split / u["audio"] for u in turns])
                 itn_out = [itn(r) or r for r in raw] if itn else raw
                 texts = [m or r for r, m in zip(itn_out, mapper.chat([custom_mapper_conv(r) for r in itn_out]))] if mapper else itn_out
+                query_snippet = texts[-1][:70] + "..." if len(texts[-1]) > 70 else texts[-1]
+                log_msg(f"[{i + 1}/{len(items)}] {item['id']} START: \"{query_snippet}\"")
                 tools = tool_specs(item, catalog)
                 keep = len(texts) - 1
                 msgs = build_messages(item, texts, keep)
                 while keep and llm.n_tokens(msgs, tools) > a.max_ctx - MAX_NEW * 2:
                     keep -= 1
                     msgs = build_messages(item, texts, keep)
+                init_tokens = llm.n_tokens(msgs, tools)
+                log_msg(f"  -> Context: history_turns={len(item.get('history', []))}, tools={len(tools)}, tokens={init_tokens}")
                 if gold:
                     llm.queue = list(item["label"]["tool_calls"])
-                run_agent(env, llm, msgs, tools, catalog, trace, system_prompt, rounds=rounds, deadline=deadline, max_ctx=a.max_ctx)
+                run_agent(env, llm, msgs, tools, catalog, trace, system_prompt, rounds=rounds, deadline=deadline, max_ctx=a.max_ctx, log_msg=log_msg)
             except Exception as e:
                 trace.append({"error": f"{type(e).__name__}: {str(e)[:300]}"})
 

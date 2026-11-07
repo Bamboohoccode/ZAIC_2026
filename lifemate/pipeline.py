@@ -372,33 +372,18 @@ def run_asr(model, paths):
 # ---------------------------------------------------------------- agent
 
 
-def plan_step(llm, msgs, tools, trace, rounds, deadline, max_ctx=MAX_CTX):
+def plan_step(llm, msgs, tools, trace, rounds, deadline):
     """Planner proposes the next calls; verifier ACCEPTs or REJECTs with a reason, at most `rounds` times."""
     query = msgs[-1]["content"] if msgs[-1]["role"] == "user" else next(m["content"] for m in reversed(msgs) if m["role"] == "user")
     feedback = []
-    # Truncate / prune msgs if approaching max_ctx to prevent VLLMValidationError
-    safe_msgs = [dict(m) for m in msgs]
-    # 1. Rút ngắn nội dung các kết quả tool đọc quá dài (> 200 ký tự)
-    for m in safe_msgs:
-        if m.get("role") == "tool" and len(m.get("content", "")) > 200:
-            m["content"] = m["content"][:200] + "... [truncated]"
-
-    # 2. Cắt tỉa nếu vẫn vượt ngưỡng token: CHỈ xoá tool/assistant trung gian, BẢO VỆ TUYỆT ĐỐI User Query và System
-    while len(safe_msgs) > 3 and llm.n_tokens(safe_msgs + feedback, tools) > max_ctx - MAX_NEW * 2:
-        drop_idx = next((i for i, m in enumerate(safe_msgs) if 1 <= i < len(safe_msgs) - 1 and m.get("role") in ("tool", "assistant")), None)
-        if drop_idx is not None:
-            safe_msgs.pop(drop_idx)
-        else:
-            break
-
     for attempt in range(rounds + 1):
-        out = llm.chat([safe_msgs + feedback], tools)[0]
+        out = llm.chat([msgs + feedback], tools)[0]
         trace.append({"plan": out})
         calls = parse_calls(out)
         if not calls or attempt == rounds or time.time() > deadline:  # nothing to check, past N rejects, or out of time: run the last plan
             return out, calls
         shown = "\n".join(f"<tool_call>{json.dumps(c, ensure_ascii=False)}</tool_call>" for c in calls)
-        verdict = llm.chat([safe_msgs + [{"role": "user", "content": VERIFY.format(query=query, calls=shown, text=re.sub(r"<tool_call>.*?</tool_call>", "", out, flags=re.S).strip())}]], tools)[0]
+        verdict = llm.chat([msgs + [{"role": "user", "content": VERIFY.format(query=query, calls=shown, text=re.sub(r"<tool_call>.*?</tool_call>", "", out, flags=re.S).strip())}]], tools)[0]
         ok, reason = parse_verdict(verdict)
         trace.append({"verify": verdict})
         if ok:
@@ -406,18 +391,13 @@ def plan_step(llm, msgs, tools, trace, rounds, deadline, max_ctx=MAX_CTX):
         feedback = [{"role": "assistant", "content": out}, {"role": "user", "content": REPLAN.format(reason=reason)}]
 
 
-def run_agent(env, llm, msgs, tools, catalog, trace, rounds=VERIFY_ROUNDS, deadline=float("inf"), max_ctx=MAX_CTX):
-    from lifemate.validator.validator import validate_and_guard_calls
+def run_agent(env, llm, msgs, tools, catalog, trace, rounds=VERIFY_ROUNDS, deadline=float("inf")):
     done = set()
     for _ in range(MAX_STEPS):
         if time.time() > deadline:  # keep the calls that already ran
             trace.append({"error": "time limit"})
             return
-        out, calls = plan_step(llm, msgs, tools, trace, rounds, deadline, max_ctx=max_ctx)
-        if not calls:
-            return
-        query = msgs[-1]["content"] if msgs[-1]["role"] == "user" else next((m["content"] for m in reversed(msgs) if m["role"] == "user"), "")
-        calls = validate_and_guard_calls(calls, catalog, msgs, query)
+        out, calls = plan_step(llm, msgs, tools, trace, rounds, deadline)
         if not calls:
             return
         ai = len(msgs)
@@ -461,42 +441,14 @@ def main():
     ap.add_argument("--llm-lora")
     ap.add_argument("--gpu-mem", type=float, default=0.7, help="main LLM gpu_memory_utilization")
     ap.add_argument("--mapper-gpu-mem", type=float, default=0.1, help="mapper gpu_memory_utilization")
-    ap.add_argument("--max-ctx", type=int, default=MAX_CTX, help="max model sequence length (context)")
     ap.add_argument("--eager", action="store_true", help="vLLM enforce_eager: skip CUDA graphs (slower, avoids capture errors)")
     ap.add_argument("--verify-rounds", type=int, default=VERIFY_ROUNDS)
     ap.add_argument("--text", action="store_true", help="use audio_text instead of ASR (train only)")
-    ap.add_argument("--ids", help="path to a text file with IDs to run (e.g. eval/splits/dev_ids.txt)")
-    ap.add_argument("--prompt", help="path to custom system prompt template file")
-    ap.add_argument("--mapper-prompt", help="path to custom dialect mapper prompt file")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--log", help="path to log file (default: <out>.log)")
-    ap.add_argument("--resume", action="store_true", help="skip samples already present in --out and append new results")
     a = ap.parse_args()
     gold = a.llm == "gold"
     rounds = 0 if gold else a.verify_rounds
-    global SYSTEM, MAPPER_SYSTEM, MAPPER_SHOTS
-    if a.prompt:
-        SYSTEM = open(a.prompt, encoding="utf-8").read()
-    if a.mapper_prompt:
-        content = open(a.mapper_prompt, encoding="utf-8").read()
-        if "### EXAMPLES" in content:
-            sys_part, examples_part = content.split("### EXAMPLES", 1)
-            MAPPER_SYSTEM = sys_part.strip()
-            custom_shots = []
-            for pair in examples_part.strip().split("\n\n"):
-                lines = [l.strip() for l in pair.split("\n") if l.strip()]
-                if len(lines) == 1 and " -> " in lines[0]:
-                    parts = lines[0].lstrip("- ").split(" -> ")
-                    custom_shots.append((parts[0].strip('"\' '), parts[1].strip('"\' ')))
-                elif len(lines) >= 2:
-                    q = re.sub(r"^(User|Q|Hỏi):\s*", "", lines[0], flags=re.I)
-                    ans = re.sub(r"^(Assistant|A|Trả lời):\s*", "", lines[1], flags=re.I)
-                    custom_shots.append((q.strip('"\' '), ans.strip('"\' ')))
-            if custom_shots:
-                MAPPER_SHOTS = custom_shots
-        else:
-            MAPPER_SYSTEM = content.strip()
 
     os.environ.setdefault("VLLM_ENABLE_V1_MULTIPROCESSING", "0")  # in-process engine: reproducible, freeable
     random.seed(a.seed)
@@ -515,9 +467,6 @@ def main():
     catalog = {t["name"]: t for app in json.load(open(root / a.split / f"{a.split}_tools_catalog.json", encoding="utf-8"))["apps"]
                for t in app["tools"]}
     items = [json.loads(l) for l in open(root / a.split / f"{a.split}.jsonl", encoding="utf-8") if l.strip()]
-    if a.ids:
-        filter_ids = set(open(a.ids, encoding="utf-8").read().split())
-        items = [item for item in items if item["id"] in filter_ids]
     items = items[:a.limit] if a.limit else items
     t_start = time.time()
 
@@ -526,45 +475,11 @@ def main():
     itn = load_itn(a.itn, a.itn_device) if a.itn else None
     m_args = (a.mapper, a.mapper_lora, a.mapper_gpu_mem, a.seed, 2048, 256, {"enable_thinking": False}, a.eager)
     mapper = None if a.mapper == "none" or gold else RemoteVLLM(a.mapper_device, *m_args) if a.mapper_device else VLLM(*m_args)
-    llm = GoldLLM() if gold else VLLM(a.llm, a.llm_lora, a.gpu_mem, a.seed, a.max_ctx, MAX_NEW, None, a.eager)
+    llm = GoldLLM() if gold else VLLM(a.llm, a.llm_lora, a.gpu_mem, a.seed, MAX_CTX, MAX_NEW, None, a.eager)
     slow = []
-    log_path = a.log or (a.out + ".log")
-    done_ids = set()
-    if a.resume and os.path.exists(a.out):
-        for l in open(a.out, encoding="utf-8"):
-            if l.strip():
-                try:
-                    row = json.loads(l)
-                    if "id" in row:
-                        done_ids.add(row["id"])
-                except Exception:
-                    pass
-
-    out_mode = "a" if (a.resume and done_ids) else "w"
-    with open(a.out, out_mode, encoding="utf-8") as fout, \
-         open(a.out + ".trace.jsonl", out_mode, encoding="utf-8") as ftr, \
-         open(log_path, out_mode, encoding="utf-8") as flog:
-
-        def log_msg(msg=""):
-            print(msg, flush=True)
-            flog.write(msg + "\n")
-            flog.flush()
-
-        log_msg(f"=== Lifemate Pipeline Run ===")
-        log_msg(f"Start: {datetime.now().isoformat()}")
-        log_msg(f"Output: {a.out} | Trace: {a.out}.trace.jsonl | Log: {log_path}")
-        log_msg(f"Split: {a.split} | Total samples: {len(items)}")
-        if done_ids:
-            log_msg(f"Resume active: {len(done_ids)}/{len(items)} samples already finished in {a.out}")
-        if a.prompt:
-            log_msg(f"Prompt: {a.prompt}")
-
+    with open(a.out, "w", encoding="utf-8") as fout, open(a.out + ".trace.jsonl", "w", encoding="utf-8") as ftr:
         for i, item in enumerate(items):
-            if a.resume and item["id"] in done_ids:
-                continue
-            log_msg(f"[{i + 1}/{len(items)}] {item['id']} running...")
             t0 = time.time()  # the time limit covers ASR and mapper of this sample too
-            deadline = t0 + 120  # giới hạn tối đa 2 phút/mẫu, chống kẹt loop
             env = ToolEnv(a.split, item["id"], root=str(root))
             trace, raw, texts, keep = [], [], [], 0
             try:
@@ -578,12 +493,12 @@ def main():
                 tools = tool_specs(item, catalog)
                 keep = len(texts) - 1
                 msgs = build_messages(item, texts, keep)
-                while keep and llm.n_tokens(msgs, tools) > a.max_ctx - MAX_NEW * 2:
+                while keep and llm.n_tokens(msgs, tools) > MAX_CTX - MAX_NEW * 2:
                     keep -= 1
                     msgs = build_messages(item, texts, keep)
                 if gold:
                     llm.queue = list(item["label"]["tool_calls"])
-                run_agent(env, llm, msgs, tools, catalog, trace, rounds, deadline=deadline, max_ctx=a.max_ctx)
+                run_agent(env, llm, msgs, tools, catalog, trace, rounds)
             except Exception as e:  # keep what already ran; a crash must still write the line
                 trace.append({"error": f"{type(e).__name__}: {str(e)[:300]}"})
             calls = env.get_tool_calls()
@@ -594,42 +509,14 @@ def main():
                                   ensure_ascii=False) + "\n")
             ftr.write(json.dumps({"id": item["id"], "raw_texts": raw, "mapped_texts": texts,
                                   "kept_history": keep, "steps": trace, "seconds": round(dt, 2)}, ensure_ascii=False) + "\n")
-            fout.flush()
-            ftr.flush()
             err = next((s["error"][:120] for s in trace if "error" in s), "")
-            log_msg(f"[{i + 1}/{len(items)}] {item['id']} DONE calls={len(calls)} {dt:.1f}s {err}".strip())
+            print(f"[{i + 1}/{len(items)}] {item['id']} calls={len(calls)} {dt:.1f}s {err}", flush=True)
 
-            # Định kỳ mỗi 10 mẫu tự động sao lưu sang Google Drive nếu đang chạy trên Colab
-            if (i + 1) % 10 == 0:
-                try:
-                    drive_dir = Path("/content/drive/MyDrive/ZAIC_2026_runs")
-                    if drive_dir.parent.exists():
-                        drive_dir.mkdir(parents=True, exist_ok=True)
-                        import shutil
-                        for f_sync in [a.out, log_path]:
-                            if os.path.exists(f_sync):
-                                shutil.copy(f_sync, drive_dir / Path(f_sync).name)
-                except Exception:
-                    pass
-
-        total = time.time() - t_start
-        log_msg(f"\n{len(items)} samples -> {a.out} | avg {total / max(len(items), 1):.1f}s/sample"
-                f" | agent > {TIME_LIMIT_S}s: {len(slow)}")
-        for sid, dt in slow:
-            log_msg(f"  {sid}: {dt}s")
-
-    # Tự động sao lưu toàn bộ kết quả sang Google Drive khi kết thúc
-    try:
-        drive_dir = Path("/content/drive/MyDrive/ZAIC_2026_runs")
-        if drive_dir.parent.exists():
-            drive_dir.mkdir(parents=True, exist_ok=True)
-            import shutil
-            for f_sync in [a.out, a.out + ".trace.jsonl", log_path]:
-                if os.path.exists(f_sync):
-                    shutil.copy(f_sync, drive_dir / Path(f_sync).name)
-            print(f"✅ Đã tự động sao lưu toàn bộ kết quả sang Google Drive: {drive_dir}")
-    except Exception as e:
-        pass
+    total = time.time() - t_start
+    print(f"\n{len(items)} samples -> {a.out} | avg {total / max(len(items), 1):.1f}s/sample"
+          f" | agent > {TIME_LIMIT_S}s: {len(slow)}")
+    for sid, dt in slow:
+        print(f"  {sid}: {dt}s")
 
 
 if __name__ == "__main__":

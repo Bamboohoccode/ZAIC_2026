@@ -14,6 +14,7 @@ Verifier kiểm plan của Planner trước khi chạm ToolEnv: so với action 
 | `oracle_ceiling.py` | Trần điểm của Verifier hoàn hảo (dùng gold), và điểm thật khi gắn Verifier (`--rules`, `--model`, `--scores`) theo từng ngưỡng | có |
 | `data.py` | Sinh mẫu ĐÚNG/SAI từ train, có/không kèm query (có `add_arg`: thêm tham số thừa, lỗi thật nhiều nhất), thêm lỗi thật từ dự đoán (bỏ dev) | có |
 | `train.py` | Fine-tune bộ phân loại, đổi model nền: mmBERT-base/small, XLM-R, mDeBERTa | không (cần file từ data.py) |
+| `chay_verifier.bat` | Windows có GPU NVIDIA: kiểm GPU, chạy test, train, chấm Verifier thật trên dev (`lifemateerifier\chay_verifier.bat .. mmbert-small`) | có (chép tay, không commit) |
 | `smoke_test_laya.py` | Kiểm Laya-multilingual có hiểu tiếng Việt, độ trễ | không |
 | `tests/` | 23 test, chạy không cần pytest | không |
 

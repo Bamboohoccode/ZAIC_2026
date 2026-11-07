@@ -29,6 +29,9 @@ python lifemate/verifier/analyze_errors.py --pred dev_v4.jsonl --kinds test/resu
 python lifemate/verifier/analyze_errors.py --root data/raw/train+public_test --split train \
     --pred dev_v4.jsonl --ids eval/splits/dev_ids.txt --out runs/errors_v4.json
 
+# trần điểm Verifier hoàn hảo (cần data/)
+python lifemate/verifier/oracle_ceiling.py --root data/raw/train+public_test --pred dev_v4.jsonl \n    --ids eval/splits/dev_ids.txt --out runs/oracle_v4.json
+
 # sinh dữ liệu và train (Kaggle GPU)
 python lifemate/verifier/data.py --root data/raw/train+public_test --out runs/ver.jsonl
 python lifemate/verifier/data.py --root data/raw/train+public_test --with-query --out runs/ver_q.jsonl

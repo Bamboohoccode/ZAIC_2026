@@ -43,5 +43,14 @@
     "empty": 0.6364,
     "avg_latency_s": 27.04,
     "notes": "Empty F1 reached 0.6364 (highest), but Ask F1 dropped to 0.0492 due to prompt bloat and diluted attention on ask_missing_info."
+  },
+  "planner_v4": {
+    "file": "planner_v4.txt",
+    "mean_score": null,
+    "act": null,
+    "ask": null,
+    "empty": null,
+    "avg_latency_s": null,
+    "notes": "Minimal Surgery on planner_v1: Exact 33-line core of v1 (retaining Ask F1 0.1989) + exactly 1 line constraint on minimal arguments (banning auto-filling repeat/note). Ready for Kaggle run."
   }
 }

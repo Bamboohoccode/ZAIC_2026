@@ -1,0 +1,49 @@
+# Cấu hình GEPA của Kiệt. Đường dẫn tính từ gốc repo.
+root: data
+split: train
+dev_ids: eval/splits/dev_ids.txt           # tập giữ lại: không dùng để tối ưu
+seed_prompt: prompts/gepa/vuong/planner_v0.txt   # chung baseline với Vương
+prompts_dir: prompts/gepa/kiet
+synth_path: data/synth/train_synth.jsonl    # từ synth/gen_three_labels.py; không có file thì bỏ qua
+asr_cache: runs/asr/train_asr.jsonl        # mode asr ghi (dạng ASROut của contracts.py); có n-best của Khánh thì trỏ sang file đó
+asr_device: cuda:0
+mapper_seed: prompts/gepa/kiet/mapper_v0.txt
+mapper_planner_prompt: prompts/gepa/vuong/planner_v4.txt   # Champion đã đo của Vương (mean F1 0.3597); v5 chưa có kết quả
+mapper_metric: proxy                       # proxy: không chạy Planner, ~vài giây/minibatch | e2e: điểm cuối, ~27s/mẫu
+mapper_budget: 2000                        # proxy rẻ nên budget lớn; e2e thì hạ ~300
+mapper_minibatch: 8
+mapper_n_train: 400
+mapper_n_val: 100
+max_vocab: 40                              # số giá trị enum tối đa đưa vào từ điển thực thể
+old_mapper_gpu_mem: 0.12                   # eval --mapper old: VRAM cho Qwen3-0.6B, Planner tự giảm gpu_mem tương ứng
+mapper_same_frac: 0.25                     # thêm mẫu ASR đã đúng = 25% số mẫu ASR sai, để Mapper học chép y nguyên
+run_dir: runs/gepa_kiet                    # gitignore sẵn. Giữ thư mục này = chạy tiếp từ checkpoint (khi Kaggle ngắt), xoá = chạy mới
+
+model: Qwen/Qwen3-4B-Instruct-2507
+gpu_mem: 0.9
+max_ctx: 8192                              # như baseline của Vương (T4); tăng nếu GPU đủ KV cache
+eager: false
+seed: 0
+verify_rounds: 0                           # như ablation của Vương (06/11): F1 0.3109 ~ 0.3117, nhanh hơn 21%
+time_limit_s: 0                            # 0 = không cắt giờ, như pipeline và baseline của Vương (T4 chậm hơn A30 nên cắt 30s ở đây là thiệt)
+
+# tập dữ liệu (chia theo app, loại dev); mix = tỉ lệ nhóm, tăng ask/empty vì đây là nhóm yếu
+n_train: 240
+n_val: 60
+val_app_frac: 0.2
+mix: {act: 0.55, ask: 0.30, empty: 0.15}
+
+# GEPA
+budget: 500                                # tổng số rollout (mỗi rollout ~10-20s trên T4)
+minibatch: 4
+max_records: 4                             # số mẫu lỗi đưa vào mỗi lượt phản tư
+max_prompt_chars: 6000                     # chặn prompt phình to (context 8192 token)
+hash_credit: 0.2                           # điểm cho mẫu lệch hash = 0.2 * F1, 0 = đúng công thức BTC
+
+reflection:                                # mặc định: chính Qwen3-4B đang chạy
+  temperature: 0.7
+  max_tokens: 1536
+  # dùng API ngoài (chưa được BTC xác nhận là hợp lệ, xem PROJECT_OVERVIEW mục 9b):
+  # api_url: https://api.openai.com/v1/chat/completions
+  # api_model: gpt-4o-mini
+  # api_key_env: OPENAI_API_KEY

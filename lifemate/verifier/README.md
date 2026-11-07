@@ -11,6 +11,7 @@ Verifier kiểm plan của Planner trước khi chạm ToolEnv: so với action 
 |---|---|---|
 | `diff.py` | Verifier luật: ID bịa, lặp write/read, call sau ask, tool lạ, hỏi lại tham số đã biết. `to_text` chuỗi hoá input cho model | không |
 | `analyze_errors.py` | Phân loại call sai của Planner: diff bắt được, hỏi thừa, cần query, thiếu call | full: có. partial: không |
+| `oracle_ceiling.py` | Trần điểm của Verifier hoàn hảo (dùng gold): hỏi user / bỏ call sai / bỏ có chọn lọc | có |
 | `data.py` | Sinh mẫu ĐÚNG/SAI từ train, có/không kèm query, thêm lỗi thật từ dự đoán (bỏ dev) | có |
 | `train.py` | Fine-tune bộ phân loại, đổi model nền: mmBERT-base/small, XLM-R, mDeBERTa | không (cần file từ data.py) |
 | `smoke_test_laya.py` | Kiểm Laya-multilingual có hiểu tiếng Việt, độ trễ | không |
@@ -38,7 +39,12 @@ pip install laya torch
 python lifemate/verifier/smoke_test_laya.py --device cuda --out runs/laya_smoke.json
 ```
 
-## Điểm hiện tại (07/11)
+## Điểm hiện tại (07/11, dữ liệu BTC v3.2.0, dev 300 mẫu, dự đoán `dev_v4` của Vương, chế độ --text)
+- `analyze_errors.py` full: 546 call dự đoán, 255 đúng, 291 sai/thừa. Trong 291 call sai: thêm tham số gold không có 101 (35%), sai tool hoặc thừa 92 (32%), sai giá trị 72 (25%), hỏi thừa 21 (7%), `diff.py` bắt được **1 (0,3%, UNSEEN_ID)**, báo nhầm 0. Planner bỏ sót 388/643 call gold (60%), Verifier không thêm call được.
+- `oracle_ceiling.py` (Verifier đoán đúng 100%): gốc 0,3597 | SAI thì hỏi user 0,3063 (**-0,053**) | bỏ mọi call sai 0,3760 (+0,016) | bỏ có chọn lọc 0,4218 (+0,062). Thiết kế "SAI thì hỏi user" làm giảm điểm kể cả khi Verifier hoàn hảo; phần tăng chủ yếu ở mẫu `empty` và `ask`. Bỏ call sai làm giảm 25 mẫu act (call không khớp gold nhưng vẫn ra đúng state).
+
+### Ghi chú trước đó
+
 - Smoke-test Laya (CPU, bộ thử nhỏ): phân loại app có dấu 0,90 (tiếng Anh 1,00), có/không AUC vi 0,72, zero-shot bài Verifier AUC 0,61, độ trễ CPU p50 315 ms. Chưa đo GPU.
 - Phân tích lỗi partial trên dự đoán dev của Vương (no_verify, v1, v4; 300 mẫu, 503 đến 546 call): **0 lỗi kiểu state-only** (lặp write, lặp read, call sau ask). Pipeline đã chặn sẵn ID bịa, đọc lặp, call sau ask (`pipeline.run_agent`). Nghĩa là Verifier không dùng query gần như không còn gì để bắt trên pipeline hiện tại; cần chạy chế độ full để xác nhận và đo phần "cần query".
 - `train.py` đã chạy thông trên CPU với mmBERT-small và dữ liệu giả (140.642.306 tham số, p50 129 ms CPU). Điểm trên dữ liệu giả không có ý nghĩa.

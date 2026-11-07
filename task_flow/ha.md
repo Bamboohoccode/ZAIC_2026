@@ -35,6 +35,8 @@ Verifier dưới 0,4B tham số, chạy nhanh. Input là các action đã lưu t
    - Làm: chốt checkpoint, ngưỡng, README module, ghi `docs/DECISIONS.md`, PR vào `main` trước tag `freeze-15-11`.
 
 ## Note tiến độ (mới nhất ở trên)
+- 07/11 (đêm): **Phát hiện quan trọng cần báo nhóm.** Chạy `analyze_errors.py` (chế độ partial, không cần dữ liệu) trên dự đoán dev của Vương (no_verify, v1, v4; 300 mẫu): 0 call trùng lặp, 0 call sau ask, 30/30 mẫu có ask đặt ask ở cuối. Lý do: `pipeline.run_agent` đã chặn sẵn ID bịa, đọc lặp và dừng sau ask. Nghĩa là lỗi kiểu "lệch với state" gần như không lọt ra; 46% mẫu lệch hash nhiều khả năng là lỗi sai ý user, Verifier không có query không bắt được. Cần chạy chế độ full (có data) để xác nhận và đo phần "cần query". Đề xuất nhóm xem lại quyết định 06/11 (Verifier không dùng query), khớp với hướng của Tiên ở task_flow/tien.md mục C4.
+- 07/11 (đêm): Push lên `verifier/ha` (commit 78036cf): `analyze_errors.py` (phân loại lỗi Planner), `data.py` (sinh ĐÚNG/SAI, có/không query, thêm lỗi thật bỏ dev), `train.py` (đổi backbone mmBERT/XLM-R/mDeBERTa, chạy thông trên CPU với mmBERT-small), README module, 22 test pass.
 - 07/11 (tối): Chạy smoke-test Laya thật trên CPU local (laya 0.4.27, torch 2.15 CPU, `convaiinnovations/laya-multilingual`, đếm được 321.908.995 tham số). Kết quả (bộ thử nhỏ, 10 đến 15 câu mỗi phần, chỉ để định hướng):
   - A. Phân loại 5 app: có dấu 0,90, phương ngữ 0,90, tiếng Anh 1,00, không dấu 0,50 (đoán bừa 0,20). Tiếng Việt có dấu chỉ kém tiếng Anh 0,10.
   - B. Có/không về chi tiết (số tiền, giờ, phủ định): AUC vi 0,72, en 0,86. Vừa qua ngưỡng gợi ý 0,70, tiếng Việt kém tiếng Anh rõ.
@@ -53,4 +55,5 @@ Verifier dưới 0,4B tham số, chạy nhanh. Input là các action đã lưu t
 ## Cần trao đổi
 - Tiên: `lifemate/contracts.py` còn `Verdict` cũ (`ACCEPT|REJECT|ASK`, `reason`), cần đổi sang `CORRECT|WRONG`, `confidence`, `diff` theo PROJECT_OVERVIEW.md mục 4. Cần thống nhất điểm cắm Verifier trong `plan_step` của `pipeline.py`.
 - Kiệt, Vương: định dạng "action đã lưu" mà module state sẽ xuất ra. Trước khi có, Hà tự trích từ lịch sử hội thoại.
+- Cả nhóm: Verifier có nhận lời user (query) không? Số liệu partial cho thấy không có query thì gần như không còn lỗi để bắt (xem note 07/11 đêm). Cần dữ liệu BTC (`data/`) trên Kaggle để chạy chế độ full.
 - Cả nhóm (mục 9g): khi Verifier báo SAI, `sys.ask_missing_info` lấy `tool_name` và `params` từ đâu. Đề xuất: tool của call bị lệch và các tham số mà diff chỉ ra.

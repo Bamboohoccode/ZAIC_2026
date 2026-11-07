@@ -7,6 +7,8 @@ Công thức:
 3. Out-of-scope / Empty: Gold rỗng -> Nộp rỗng được 1, nộp có tool được 0.
 4. F1 Score: 2 * M / (|Submitted| + |Gold|).
 5. Phân loại lỗi chi tiết (diagnostic categorization) phục vụ GEPA / phân tích lỗi.
+
+Hàm dùng chung (metric GEPA, run_eval): load_split, score_sample, match_calls, task_kind, task_app, gold_hash.
 """
 import json
 import sys
@@ -14,6 +16,8 @@ import unicodedata
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+ASK = "sys.ask_missing_info"
 
 
 def toks(s: Any) -> List[str]:
@@ -44,6 +48,71 @@ def call_matches(c: Dict[str, Any], g: Dict[str, Any], catalog: Dict[str, Any]) 
     return True
 
 
+def task_kind(G: List[Dict[str, Any]]) -> str:
+    """empty (gold rỗng) | ask (có sys.ask_missing_info) | act."""
+    return "empty" if not G else "ask" if any(g["name"] == ASK for g in G) else "act"
+
+
+def task_app(G: List[Dict[str, Any]]) -> str:
+    """App của mẫu: tiền tố tool đầu tiên không phải sys.*, hoặc tool_name trong ask; '(none)' nếu gold rỗng."""
+    for g in G:
+        name = (g.get("arguments") or {}).get("tool_name", "") if g["name"] == ASK else g["name"]
+        if name and not name.startswith("sys."):
+            return name.split(".")[0]
+    return "(none)"
+
+
+def match_calls(calls: List[Dict[str, Any]], G: List[Dict[str, Any]], catalog: Dict[str, Any]):
+    """Ghép tham lam, không xét thứ tự. -> (cặp khớp, call thừa, gold bị thiếu)."""
+    left, pairs, extra = list(G), [], []
+    for c in calls:
+        j = next((i for i, g in enumerate(left) if call_matches(c, g, catalog)), None)
+        if j is None:
+            extra.append(c)
+        else:
+            pairs.append((c, left.pop(j)))
+    return pairs, extra, left
+
+
+def score_sample(G, calls, state_hash, gold_state_hash, catalog) -> Tuple[float, Optional[str]]:
+    """Điểm một mẫu theo BTC -> (score, loại lỗi hoặc None)."""
+    if state_hash != gold_state_hash:
+        return 0.0, "HASH_MISMATCH"
+    if not G:
+        return (1.0, None) if not calls else (0.0, "FALSE_ACT")  # phải rỗng nhưng lại gọi tool
+    score = 2 * len(match_calls(calls, G, catalog)[0]) / (len(calls) + len(G))
+    if score >= 1.0:
+        return score, None
+    asked, kind = any(c["name"] == ASK for c in calls), task_kind(G)
+    if asked and kind == "act":
+        return score, "FALSE_ASK"
+    if not asked and kind == "ask":
+        return score, "MISSED_ASK"
+    if len(calls) != len(G):
+        return score, "EXTRA_CALL" if len(calls) > len(G) else "MISSING_CALL"
+    return score, "WRONG_TOOL_OR_ARGS"
+
+
+def load_split(root: str, split: str):
+    """-> (catalog {tên tool: spec}, các mẫu của split, lớp ToolEnv của BTC)."""
+    d = Path(root) / split
+    if str(d) not in sys.path:
+        sys.path.insert(0, str(d))
+    from zaic_tools import ToolEnv
+    catalog = {t["name"]: t for app in json.load(open(d / f"{split}_tools_catalog.json", encoding="utf-8"))["apps"]
+               for t in app["tools"]}
+    items = [json.loads(l) for l in open(d / f"{split}.jsonl", encoding="utf-8") if l.strip()]
+    return catalog, items, ToolEnv
+
+
+def gold_hash(ToolEnv, root: str, split: str, sid: str, G: List[Dict[str, Any]]) -> str:
+    """Replay gold tool_calls qua zaic_tools để lấy state_hash chuẩn."""
+    env = ToolEnv(split, sid, root=str(root))
+    for g in G:
+        env.call(g["name"], g["arguments"])
+    return env.get_state_hash()
+
+
 def evaluate_submission(
     root: str,
     split: str,
@@ -51,80 +120,47 @@ def evaluate_submission(
     filter_ids: Optional[set] = None,
     verbose: bool = True
 ) -> Dict[str, Any]:
-    """Chấm điểm submission.jsonl đối chiếu với nhãn train/split."""
-    split_dir = Path(root) / split
-    sys.path.insert(0, str(split_dir))
-    from zaic_tools import ToolEnv
+    """Chấm submission; filter_ids cố định tập cần chấm, ID mục tiêu bị thiếu nhận 0 điểm.
 
-    catalog = {
-        t["name"]: t
-        for app in json.load(open(split_dir / f"{split}_tools_catalog.json", encoding="utf-8"))["apps"]
-        for t in app["tools"]
-    }
-    gold = {
-        d["id"]: d
-        for d in map(json.loads, open(split_dir / f"{split}.jsonl", encoding="utf-8"))
-    }
+    Nếu filter_ids=None, chỉ chấm các ID có trong submission (hữu ích cho pipeline chạy --limit).
+    """
+    catalog, items, ToolEnv = load_split(root, split)
+    gold = {d["id"]: d for d in items}
 
     sub_items = [json.loads(l) for l in open(sub_path, encoding="utf-8") if l.strip()]
-    if filter_ids:
-        sub_items = [s for s in sub_items if s["id"] in filter_ids]
+    seen = set()
+    for s in sub_items:
+        sid = s.get("id")
+        if sid not in gold:
+            raise ValueError(f"Submission có ID không có trong {split}: {sid!r}")
+        if sid in seen:
+            raise ValueError(f"Submission có ID trùng: {sid}")
+        seen.add(sid)
+    # Khi chấm một subset (vd pipeline --limit 100), domain mặc định là các ID có trong file.
+    # Truyền filter_ids để cố định domain và tính mẫu thiếu là 0, tránh score/pass^k bị thổi phồng.
+    requested_ids = seen if filter_ids is None else set(filter_ids)
+    unknown_filter_ids = requested_ids - set(gold)
+    if unknown_filter_ids:
+        raise ValueError(f"ID lọc không có trong {split}: {sorted(unknown_filter_ids)[:10]}")
+    sub_by_id = {s["id"]: s for s in sub_items if s["id"] in requested_ids}
 
-    total_scores = []
-    by_kind = defaultdict(list)
+    scores = {}
+    by_kind, by_app = defaultdict(list), defaultdict(list)
     diagnostics = []
 
-    for s in sub_items:
-        sid = s["id"]
-        g_item = gold[sid]
-        G = g_item["label"]["tool_calls"]
-        submitted_calls = s.get("tool_calls", [])
-
-        # Replay gold calls qua zaic_tools để lấy gold state_hash
-        env = ToolEnv(split, sid, root=str(root))
-        for g in G:
-            env.call(g["name"], g["arguments"])
-        gold_hash = env.get_state_hash()
-
-        kind = "empty" if not G else "ask" if any(g["name"] == "sys.ask_missing_info" for g in G) else "act"
-
-        # Đánh giá
-        error_type = None
-        if not G:
-            if not submitted_calls:
-                score = 1.0
-            else:
-                score = 0.0
-                error_type = "FALSE_ACT"  # Phải rỗng nhưng lại gọi tool
-        elif s.get("state_hash") != gold_hash:
-            score = 0.0
-            error_type = "HASH_MISMATCH"
+    for sid in sorted(requested_ids):
+        G = gold[sid]["label"]["tool_calls"]
+        s = sub_by_id.get(sid)
+        submitted_calls = s.get("tool_calls", []) if s else []
+        if s is None:
+            score, error_type = 0.0, "MISSING_SUBMISSION"
         else:
-            left_gold = list(G)
-            matched = 0
-            for c in submitted_calls:
-                j = next((idx for idx, g in enumerate(left_gold) if call_matches(c, g, catalog)), None)
-                if j is not None:
-                    left_gold.pop(j)
-                    matched += 1
-            denom = len(submitted_calls) + len(G)
-            score = 2 * matched / denom if denom else 0.0
-
-            if score < 1.0:
-                if any(c["name"] == "sys.ask_missing_info" for c in submitted_calls) and kind == "act":
-                    error_type = "FALSE_ASK"
-                elif not any(c["name"] == "sys.ask_missing_info" for c in submitted_calls) and kind == "ask":
-                    error_type = "MISSED_ASK"
-                elif len(submitted_calls) > len(G):
-                    error_type = "EXTRA_CALL"
-                elif len(submitted_calls) < len(G):
-                    error_type = "MISSING_CALL"
-                else:
-                    error_type = "WRONG_TOOL_OR_ARGS"
-
-        total_scores.append(score)
+            score, error_type = score_sample(G, submitted_calls, s.get("state_hash"),
+                                             gold_hash(ToolEnv, root, split, sid, G), catalog)
+        kind = task_kind(G)
+        scores[sid] = score
         by_kind[kind].append(score)
-
+        by_app[task_app(G)].append(score)
         if error_type:
             diagnostics.append({
                 "id": sid,
@@ -132,20 +168,24 @@ def evaluate_submission(
                 "error": error_type,
                 "score": round(score, 4),
                 "gold_calls": G,
-                "sub_calls": submitted_calls
+                "sub_calls": submitted_calls,
+                **({"missing_submission": True} if s is None else {})
             })
 
-    avg_total = sum(total_scores) / max(len(total_scores), 1)
+    avg_total = sum(scores.values()) / max(len(scores), 1)
+    agg = lambda d: {k: {"score": round(sum(v) / len(v), 4), "n": len(v)} for k, v in sorted(d.items())}
     summary = {
-        "total_samples": len(total_scores),
+        "total_samples": len(scores),
         "mean_score": round(avg_total, 4),
-        "by_kind": {k: {"score": round(sum(v) / len(v), 4), "n": len(v)} for k, v in sorted(by_kind.items())},
+        "by_kind": agg(by_kind),
+        "by_app": agg(by_app),
+        "scores": scores,
         "error_count": len(diagnostics),
         "diagnostics": diagnostics
     }
 
     if verbose:
-        print(f"\n===== KẾT QUẢ ĐÁNH GIÁ (N={len(total_scores)}) =====")
+        print(f"\n===== KẾT QUẢ ĐÁNH GIÁ (N={len(scores)}) =====")
         print(f"Mean Score: {avg_total:.4f}")
         for k, info in summary["by_kind"].items():
             print(f"  {k:5s}: {info['score']:.4f} (n={info['n']})")
@@ -155,7 +195,7 @@ def evaluate_submission(
                 err_counts[d["error"]] += 1
             print("\nPhân loại lỗi:")
             for err, c in sorted(err_counts.items(), key=lambda x: -x[1]):
-                print(f"  {err:20s}: {c} ({c / len(total_scores) * 100:.1f}%)")
+                print(f"  {err:20s}: {c} ({c / len(scores) * 100:.1f}%)")
 
     return summary
 

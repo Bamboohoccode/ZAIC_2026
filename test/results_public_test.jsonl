@@ -1,0 +1,122 @@
+{"tool": "smart_home.get_status", "kind": "read", "sample": "public_0002", "args": {}, "status": "ok", "error": null}
+{"tool": "smart_home.light_set", "kind": "write", "sample": "public_0002", "args": {"device_id": "light_living"}, "status": "ok", "error": null}
+{"tool": "smart_home.fan_set", "kind": "write", "sample": "public_0002", "args": {"device_id": "light_living"}, "status": "ok", "error": null}
+{"tool": "smart_home.climate_set", "kind": "write", "sample": "public_0002", "args": {"device_id": "light_living", "mode": "cool"}, "status": "ok", "error": null}
+{"tool": "smart_home.switch_set", "kind": "write", "sample": "public_0002", "args": {"device_id": "light_living", "power": "on"}, "status": "ok", "error": null}
+{"tool": "smart_home.scene_run", "kind": "write", "sample": "public_0002", "args": {"scene_id": "test_id"}, "status": "ok", "error": null}
+{"tool": "alarm.list", "kind": "read", "sample": "public_0003", "args": {}, "status": "ok", "error": null}
+{"tool": "alarm.create", "kind": "write", "sample": "public_0003", "args": {"time": "test"}, "status": "ok", "error": null}
+{"tool": "alarm.update", "kind": "write", "sample": "public_0003", "args": {"alarm_id": "alm_01"}, "status": "ok", "error": null}
+{"tool": "alarm.delete", "kind": "write", "sample": "public_0003", "args": {"alarm_id": "alm_01"}, "status": "ok", "error": null}
+{"tool": "reminders.list", "kind": "read", "sample": "public_0002", "args": {}, "status": "ok", "error": null}
+{"tool": "reminders.create", "kind": "write", "sample": "public_0002", "args": {"content": "test", "time": "test"}, "status": "ok", "error": null}
+{"tool": "reminders.complete", "kind": "write", "sample": "public_0002", "args": {"reminder_id": "test_id"}, "status": "ok", "error": null}
+{"tool": "reminders.delete", "kind": "write", "sample": "public_0002", "args": {"reminder_id": "test_id"}, "status": "ok", "error": null}
+{"tool": "calendar.list_events", "kind": "read", "sample": "public_0002", "args": {}, "status": "ok", "error": null}
+{"tool": "calendar.create_event", "kind": "write", "sample": "public_0002", "args": {"title": "test", "start": "test"}, "status": "ok", "error": null}
+{"tool": "calendar.update_event", "kind": "write", "sample": "public_0002", "args": {"event_id": "evt_01"}, "status": "ok", "error": null}
+{"tool": "calendar.cancel_event", "kind": "write", "sample": "public_0002", "args": {"event_id": "evt_01"}, "status": "ok", "error": null}
+{"tool": "notes.list", "kind": "read", "sample": "public_0174", "args": {}, "status": "ok", "error": null}
+{"tool": "notes.create", "kind": "write", "sample": "public_0174", "args": {"content": "test"}, "status": "ok", "error": null}
+{"tool": "notes.append", "kind": "write", "sample": "public_0174", "args": {"note_id": "note_01", "content": "test"}, "status": "ok", "error": null}
+{"tool": "tasks.list", "kind": "read", "sample": "public_0174", "args": {}, "status": "ok", "error": null}
+{"tool": "tasks.add", "kind": "write", "sample": "public_0174", "args": {"title": "test"}, "status": "ok", "error": null}
+{"tool": "tasks.complete", "kind": "write", "sample": "public_0174", "args": {"task_id": "task_01"}, "status": "ok", "error": null}
+{"tool": "contacts.search", "kind": "read", "sample": "public_0003", "args": {}, "status": "ok", "error": null}
+{"tool": "contacts.get", "kind": "read", "sample": "public_0003", "args": {"contact_id": "c_01"}, "status": "ok", "error": null}
+{"tool": "contacts.update", "kind": "write", "sample": "public_0003", "args": {"contact_id": "c_01", "phone": "test"}, "status": "ok", "error": null}
+{"tool": "phone.call", "kind": "write", "sample": "public_0002", "args": {"contact_id": "test_id"}, "status": "ok", "error": null}
+{"tool": "phone.recent_calls", "kind": "read", "sample": "public_0002", "args": {}, "status": "ok", "error": null}
+{"tool": "sms.send", "kind": "write", "sample": "public_0002", "args": {"content": "test", "contact_id": "test_id"}, "status": "ok", "error": null}
+{"tool": "sms.read_recent", "kind": "read", "sample": "public_0002", "args": {}, "status": "ok", "error": null}
+{"tool": "chat_ott.list_chats", "kind": "read", "sample": "public_0002", "args": {}, "status": "ok", "error": null}
+{"tool": "chat_ott.read_chat", "kind": "read", "sample": "public_0002", "args": {"chat_id": "chat_01"}, "status": "ok", "error": null}
+{"tool": "chat_ott.send_message", "kind": "write", "sample": "public_0002", "args": {"chat_id": "chat_01", "content": "test"}, "status": "ok", "error": null}
+{"tool": "chat_ott.send_location", "kind": "write", "sample": "public_0002", "args": {"chat_id": "chat_01"}, "status": "ok", "error": null}
+{"tool": "chat_ott.call", "kind": "write", "sample": "public_0002", "args": {"chat_id": "chat_01"}, "status": "ok", "error": null}
+{"tool": "email.list", "kind": "read", "sample": "public_0174", "args": {}, "status": "ok", "error": null}
+{"tool": "email.read", "kind": "read", "sample": "public_0174", "args": {"email_id": "mail_01"}, "status": "ok", "error": null}
+{"tool": "email.send", "kind": "write", "sample": "public_0174", "args": {"to": ["test"], "subject": "test", "body": "test"}, "status": "ok", "error": null}
+{"tool": "email.create_draft", "kind": "write", "sample": "public_0174", "args": {"to": ["test"], "subject": "test", "body": "test"}, "status": "ok", "error": null}
+{"tool": "email.reply", "kind": "write", "sample": "public_0174", "args": {"email_id": "mail_01", "body": "test"}, "status": "ok", "error": null}
+{"tool": "email.archive", "kind": "write", "sample": "public_0174", "args": {"email_id": "mail_01", "action": "archive"}, "status": "ok", "error": null}
+{"tool": "banking.get_balance", "kind": "read", "sample": "public_0002", "args": {}, "status": "ok", "error": null}
+{"tool": "banking.list_transactions", "kind": "read", "sample": "public_0002", "args": {}, "status": "ok", "error": null}
+{"tool": "banking.list_beneficiaries", "kind": "read", "sample": "public_0002", "args": {}, "status": "ok", "error": null}
+{"tool": "banking.transfer", "kind": "write", "sample": "public_0002", "args": {"from_account_id": "acc_01", "beneficiary_id": "ben_01", "amount": 1}, "status": "ok", "error": null}
+{"tool": "banking.open_savings", "kind": "write", "sample": "public_0002", "args": {"from_account_id": "acc_01", "amount": 1, "term_months": 1}, "status": "ok", "error": null}
+{"tool": "ewallet.get_balance", "kind": "read", "sample": "public_0002", "args": {}, "status": "ok", "error": null}
+{"tool": "ewallet.transfer", "kind": "write", "sample": "public_0002", "args": {"amount": 1, "contact_id": "test_id"}, "status": "ok", "error": null}
+{"tool": "ewallet.topup_mobile", "kind": "write", "sample": "public_0002", "args": {"phone": "test", "amount": 1}, "status": "ok", "error": null}
+{"tool": "ewallet.pay_qr", "kind": "write", "sample": "public_0002", "args": {"merchant_id": "test", "amount": 1}, "status": "ok", "error": null}
+{"tool": "bill_payment.list_bills", "kind": "read", "sample": "public_0016", "args": {}, "status": "ok", "error": null}
+{"tool": "bill_payment.pay", "kind": "write", "sample": "public_0016", "args": {"bill_id": "bill_01", "source": "bank"}, "status": "ok", "error": null}
+{"tool": "bill_payment.schedule_autopay", "kind": "write", "sample": "public_0016", "args": {"type": "test", "enabled": true}, "status": "ok", "error": null}
+{"tool": "stocks.get_quote", "kind": "read", "sample": "public_0408", "args": {"symbol": "test"}, "status": "ok", "error": null}
+{"tool": "stocks.get_portfolio", "kind": "read", "sample": "public_0408", "args": {}, "status": "ok", "error": null}
+{"tool": "stocks.place_order", "kind": "write", "sample": "public_0408", "args": {"symbol": "test", "side": "buy", "quantity": 1}, "status": "ok", "error": null}
+{"tool": "stocks.set_price_alert", "kind": "write", "sample": "public_0408", "args": {"symbol": "test", "price": 1, "direction": "above"}, "status": "ok", "error": null}
+{"tool": "weather.get_current", "kind": "read", "sample": "public_0002", "args": {}, "status": "ok", "error": null}
+{"tool": "weather.get_forecast", "kind": "read", "sample": "public_0002", "args": {"date": "test"}, "status": "ok", "error": null}
+{"tool": "gold_price.get_price", "kind": "read", "sample": "public_0002", "args": {}, "status": "ok", "error": null}
+{"tool": "fuel_price.get_price", "kind": "read", "sample": "public_0003", "args": {}, "status": "ok", "error": null}
+{"tool": "translator.translate", "kind": "read", "sample": "public_0174", "args": {"text": "test", "to_lang": "test"}, "status": "ok", "error": null}
+{"tool": "maps.search_place", "kind": "read", "sample": "public_0175", "args": {"query": "test"}, "status": "ok", "error": null}
+{"tool": "maps.get_route", "kind": "read", "sample": "public_0175", "args": {"origin": "test", "destination": "test"}, "status": "ok", "error": null}
+{"tool": "maps.save_place", "kind": "write", "sample": "public_0175", "args": {"place_id": "place_01", "label": "test"}, "status": "ok", "error": null}
+{"tool": "food_delivery.list_restaurants", "kind": "read", "sample": "public_0005", "args": {}, "status": "ok", "error": null}
+{"tool": "food_delivery.get_menu", "kind": "read", "sample": "public_0005", "args": {"restaurant_id": "rest_01"}, "status": "ok", "error": null}
+{"tool": "food_delivery.order_history", "kind": "read", "sample": "public_0005", "args": {}, "status": "ok", "error": null}
+{"tool": "food_delivery.place_order", "kind": "write", "sample": "public_0005", "args": {"restaurant_id": "rest_01", "items": [{}]}, "status": "ok", "error": null}
+{"tool": "food_delivery.cancel_order", "kind": "write", "sample": "public_0005", "args": {"order_id": "test_id"}, "status": "ok", "error": null}
+{"tool": "grocery.search", "kind": "read", "sample": "public_0176", "args": {"query": "test"}, "status": "ok", "error": null}
+{"tool": "grocery.add_to_cart", "kind": "write", "sample": "public_0176", "args": {"product_id": "gro_01", "quantity": 1}, "status": "ok", "error": null}
+{"tool": "grocery.checkout", "kind": "write", "sample": "public_0176", "args": {}, "status": "ok", "error": null}
+{"tool": "recipes.search", "kind": "read", "sample": "public_0176", "args": {"query": "test"}, "status": "ok", "error": null}
+{"tool": "recipes.get", "kind": "read", "sample": "public_0176", "args": {"recipe_id": "rcp_01"}, "status": "ok", "error": null}
+{"tool": "recipes.save", "kind": "write", "sample": "public_0176", "args": {"recipe_id": "rcp_01"}, "status": "ok", "error": null}
+{"tool": "ride_hailing.get_quotes", "kind": "read", "sample": "public_0002", "args": {"pickup": "test", "dropoff": "test"}, "status": "ok", "error": null}
+{"tool": "ride_hailing.book", "kind": "write", "sample": "public_0002", "args": {"pickup": "test", "dropoff": "test", "vehicle": "bike"}, "status": "ok", "error": null}
+{"tool": "ride_hailing.cancel", "kind": "write", "sample": "public_0002", "args": {"ride_id": "test_id"}, "status": "ok", "error": null}
+{"tool": "ride_hailing.get_ride", "kind": "read", "sample": "public_0002", "args": {}, "status": "ok", "error": null}
+{"tool": "public_transit.find_routes", "kind": "read", "sample": "public_0175", "args": {"origin": "test", "destination": "test"}, "status": "ok", "error": null}
+{"tool": "public_transit.next_departures", "kind": "read", "sample": "public_0175", "args": {"stop": "test"}, "status": "ok", "error": null}
+{"tool": "public_transit.topup_card", "kind": "write", "sample": "public_0175", "args": {"amount": 1}, "status": "ok", "error": null}
+{"tool": "parking.find", "kind": "read", "sample": "public_0175", "args": {"near": "test"}, "status": "ok", "error": null}
+{"tool": "parking.list_sessions", "kind": "read", "sample": "public_0175", "args": {}, "status": "ok", "error": null}
+{"tool": "parking.reserve", "kind": "write", "sample": "public_0175", "args": {"lot_id": "lot_01", "from_time": "2026-11-10T09:00:00", "hours": 1}, "status": "ok", "error": null}
+{"tool": "parking.end_session", "kind": "write", "sample": "public_0175", "args": {"session_id": "park_01"}, "status": "ok", "error": null}
+{"tool": "flights.search", "kind": "read", "sample": "public_0004", "args": {"origin": "test", "destination": "test", "date": "test"}, "status": "ok", "error": null}
+{"tool": "flights.book", "kind": "write", "sample": "public_0004", "args": {"flight_id": "fl_01", "passengers": 1}, "status": "ok", "error": null}
+{"tool": "flights.my_bookings", "kind": "read", "sample": "public_0004", "args": {}, "status": "ok", "error": null}
+{"tool": "flights.cancel", "kind": "write", "sample": "public_0004", "args": {"booking_id": "bk_01"}, "status": "ok", "error": null}
+{"tool": "flights.check_in", "kind": "write", "sample": "public_0004", "args": {"booking_id": "bk_01"}, "status": "ok", "error": null}
+{"tool": "train_bus_tickets.search", "kind": "read", "sample": "public_0192", "args": {"origin": "test", "destination": "test", "date": "test"}, "status": "ok", "error": null}
+{"tool": "train_bus_tickets.book", "kind": "write", "sample": "public_0192", "args": {"trip_id": "trip_01", "seats": 1}, "status": "ok", "error": null}
+{"tool": "train_bus_tickets.my_bookings", "kind": "read", "sample": "public_0192", "args": {}, "status": "ok", "error": null}
+{"tool": "train_bus_tickets.cancel", "kind": "write", "sample": "public_0192", "args": {"booking_id": "test_id"}, "status": "ok", "error": null}
+{"tool": "ecommerce.search", "kind": "read", "sample": "public_0190", "args": {"query": "test"}, "status": "ok", "error": null}
+{"tool": "ecommerce.order_status", "kind": "read", "sample": "public_0190", "args": {}, "status": "ok", "error": null}
+{"tool": "ecommerce.add_to_cart", "kind": "write", "sample": "public_0190", "args": {"product_id": "prod_01", "quantity": 1}, "status": "ok", "error": null}
+{"tool": "ecommerce.checkout", "kind": "write", "sample": "public_0190", "args": {}, "status": "ok", "error": null}
+{"tool": "ecommerce.cancel_order", "kind": "write", "sample": "public_0190", "args": {"order_id": "ord_01"}, "status": "ok", "error": null}
+{"tool": "ecommerce.request_return", "kind": "write", "sample": "public_0190", "args": {"order_id": "ord_01", "reason": "wrong_item"}, "status": "ok", "error": null}
+{"tool": "shopping_list.get", "kind": "read", "sample": "public_0176", "args": {}, "status": "ok", "error": null}
+{"tool": "shopping_list.add", "kind": "write", "sample": "public_0176", "args": {"name": "test"}, "status": "ok", "error": null}
+{"tool": "shopping_list.remove", "kind": "write", "sample": "public_0176", "args": {"item_id": "item_01"}, "status": "ok", "error": null}
+{"tool": "shopping_list.check", "kind": "write", "sample": "public_0176", "args": {"item_id": "item_01"}, "status": "ok", "error": null}
+{"tool": "music.list_tracks", "kind": "read", "sample": "public_0002", "args": {}, "status": "ok", "error": null}
+{"tool": "music.play", "kind": "write", "sample": "public_0002", "args": {"track_id": "trk_01"}, "status": "ok", "error": null}
+{"tool": "music.control", "kind": "write", "sample": "public_0002", "args": {"action": "pause"}, "status": "ok", "error": null}
+{"tool": "music.add_to_playlist", "kind": "write", "sample": "public_0002", "args": {"track_id": "trk_01", "playlist_id": "pl_01"}, "status": "ok", "error": null}
+{"tool": "tv.guide", "kind": "read", "sample": "public_0002", "args": {}, "status": "ok", "error": null}
+{"tool": "tv.tune", "kind": "write", "sample": "public_0002", "args": {"channel": "test"}, "status": "ok", "error": null}
+{"tool": "tv.control", "kind": "write", "sample": "public_0002", "args": {"action": "on"}, "status": "ok", "error": null}
+{"tool": "tv.record", "kind": "write", "sample": "public_0002", "args": {"program_id": "test_id"}, "status": "ok", "error": null}
+{"tool": "event_tickets.search", "kind": "read", "sample": "public_0189", "args": {}, "status": "ok", "error": null}
+{"tool": "event_tickets.book", "kind": "write", "sample": "public_0189", "args": {"event_id": "event_01", "quantity": 1}, "status": "ok", "error": null}
+{"tool": "habit_tracker.list_habits", "kind": "read", "sample": "public_0207", "args": {}, "status": "ok", "error": null}
+{"tool": "habit_tracker.log", "kind": "write", "sample": "public_0207", "args": {"date": "2026-11-10", "habit_id": "habit_01"}, "status": "ok", "error": null}
+{"tool": "pantry.list_items", "kind": "read", "sample": "public_0176", "args": {}, "status": "ok", "error": null}
+{"tool": "pantry.consume", "kind": "write", "sample": "public_0176", "args": {"item_id": "pan_01", "quantity": 1}, "status": "ok", "error": null}
+{"tool": "sys.ask_missing_info", "kind": "meta", "sample": "public_0002", "args": {"tool_name": "sms.send", "params": ["contact_id"]}, "status": "ok", "error": null}

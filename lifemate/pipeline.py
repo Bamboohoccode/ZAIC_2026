@@ -372,18 +372,30 @@ def run_asr(model, paths):
 # ---------------------------------------------------------------- agent
 
 
-def plan_step(llm, msgs, tools, trace, rounds, deadline):
+def plan_step(llm, msgs, tools, trace, rounds, deadline, max_ctx=MAX_CTX):
     """Planner proposes the next calls; verifier ACCEPTs or REJECTs with a reason, at most `rounds` times."""
     query = msgs[-1]["content"] if msgs[-1]["role"] == "user" else next(m["content"] for m in reversed(msgs) if m["role"] == "user")
     feedback = []
+    # Truncate / prune msgs if approaching max_ctx to prevent VLLMValidationError
+    safe_msgs = [dict(m) for m in msgs]
+    while len(safe_msgs) > 2 and llm.n_tokens(safe_msgs + feedback, tools) > max_ctx - MAX_NEW * 2:
+        shortened = False
+        for m in safe_msgs:
+            if m.get("role") == "tool" and len(m.get("content", "")) > 300:
+                m["content"] = m["content"][:300] + "... [truncated]"
+                shortened = True
+                break
+        if not shortened:
+            safe_msgs.pop(1)
+
     for attempt in range(rounds + 1):
-        out = llm.chat([msgs + feedback], tools)[0]
+        out = llm.chat([safe_msgs + feedback], tools)[0]
         trace.append({"plan": out})
         calls = parse_calls(out)
         if not calls or attempt == rounds or time.time() > deadline:  # nothing to check, past N rejects, or out of time: run the last plan
             return out, calls
         shown = "\n".join(f"<tool_call>{json.dumps(c, ensure_ascii=False)}</tool_call>" for c in calls)
-        verdict = llm.chat([msgs + [{"role": "user", "content": VERIFY.format(query=query, calls=shown, text=re.sub(r"<tool_call>.*?</tool_call>", "", out, flags=re.S).strip())}]], tools)[0]
+        verdict = llm.chat([safe_msgs + [{"role": "user", "content": VERIFY.format(query=query, calls=shown, text=re.sub(r"<tool_call>.*?</tool_call>", "", out, flags=re.S).strip())}]], tools)[0]
         ok, reason = parse_verdict(verdict)
         trace.append({"verify": verdict})
         if ok:
@@ -391,13 +403,13 @@ def plan_step(llm, msgs, tools, trace, rounds, deadline):
         feedback = [{"role": "assistant", "content": out}, {"role": "user", "content": REPLAN.format(reason=reason)}]
 
 
-def run_agent(env, llm, msgs, tools, catalog, trace, rounds=VERIFY_ROUNDS, deadline=float("inf")):
+def run_agent(env, llm, msgs, tools, catalog, trace, rounds=VERIFY_ROUNDS, deadline=float("inf"), max_ctx=MAX_CTX):
     done = set()
     for _ in range(MAX_STEPS):
         if time.time() > deadline:  # keep the calls that already ran
             trace.append({"error": "time limit"})
             return
-        out, calls = plan_step(llm, msgs, tools, trace, rounds, deadline)
+        out, calls = plan_step(llm, msgs, tools, trace, rounds, deadline, max_ctx=max_ctx)
         if not calls:
             return
         ai = len(msgs)
@@ -449,6 +461,7 @@ def main():
     ap.add_argument("--prompt", help="path to custom system prompt template file")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--log", help="path to log file (default: <out>.log)")
     a = ap.parse_args()
     gold = a.llm == "gold"
     rounds = 0 if gold else a.verify_rounds
@@ -486,7 +499,23 @@ def main():
     mapper = None if a.mapper == "none" or gold else RemoteVLLM(a.mapper_device, *m_args) if a.mapper_device else VLLM(*m_args)
     llm = GoldLLM() if gold else VLLM(a.llm, a.llm_lora, a.gpu_mem, a.seed, a.max_ctx, MAX_NEW, None, a.eager)
     slow = []
-    with open(a.out, "w", encoding="utf-8") as fout, open(a.out + ".trace.jsonl", "w", encoding="utf-8") as ftr:
+    log_path = a.log or (a.out + ".log")
+    with open(a.out, "w", encoding="utf-8") as fout, \
+         open(a.out + ".trace.jsonl", "w", encoding="utf-8") as ftr, \
+         open(log_path, "w", encoding="utf-8") as flog:
+
+        def log_msg(msg=""):
+            print(msg, flush=True)
+            flog.write(msg + "\n")
+            flog.flush()
+
+        log_msg(f"=== Lifemate Pipeline Run ===")
+        log_msg(f"Start: {datetime.now().isoformat()}")
+        log_msg(f"Output: {a.out} | Trace: {a.out}.trace.jsonl | Log: {log_path}")
+        log_msg(f"Split: {a.split} | Total samples: {len(items)}")
+        if a.prompt:
+            log_msg(f"Prompt: {a.prompt}")
+
         for i, item in enumerate(items):
             t0 = time.time()  # the time limit covers ASR and mapper of this sample too
             env = ToolEnv(a.split, item["id"], root=str(root))
@@ -507,7 +536,7 @@ def main():
                     msgs = build_messages(item, texts, keep)
                 if gold:
                     llm.queue = list(item["label"]["tool_calls"])
-                run_agent(env, llm, msgs, tools, catalog, trace, rounds)
+                run_agent(env, llm, msgs, tools, catalog, trace, rounds, max_ctx=a.max_ctx)
             except Exception as e:  # keep what already ran; a crash must still write the line
                 trace.append({"error": f"{type(e).__name__}: {str(e)[:300]}"})
             calls = env.get_tool_calls()
@@ -519,13 +548,13 @@ def main():
             ftr.write(json.dumps({"id": item["id"], "raw_texts": raw, "mapped_texts": texts,
                                   "kept_history": keep, "steps": trace, "seconds": round(dt, 2)}, ensure_ascii=False) + "\n")
             err = next((s["error"][:120] for s in trace if "error" in s), "")
-            print(f"[{i + 1}/{len(items)}] {item['id']} calls={len(calls)} {dt:.1f}s {err}", flush=True)
+            log_msg(f"[{i + 1}/{len(items)}] {item['id']} calls={len(calls)} {dt:.1f}s {err}".strip())
 
-    total = time.time() - t_start
-    print(f"\n{len(items)} samples -> {a.out} | avg {total / max(len(items), 1):.1f}s/sample"
-          f" | agent > {TIME_LIMIT_S}s: {len(slow)}")
-    for sid, dt in slow:
-        print(f"  {sid}: {dt}s")
+        total = time.time() - t_start
+        log_msg(f"\n{len(items)} samples -> {a.out} | avg {total / max(len(items), 1):.1f}s/sample"
+                f" | agent > {TIME_LIMIT_S}s: {len(slow)}")
+        for sid, dt in slow:
+            log_msg(f"  {sid}: {dt}s")
 
 
 if __name__ == "__main__":

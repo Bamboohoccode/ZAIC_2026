@@ -55,11 +55,11 @@
   },
   "planner_v5": {
     "file": "planner_v5.txt",
-    "mean_score": null,
-    "act": null,
-    "ask": null,
-    "empty": null,
-    "avg_latency_s": null,
-    "notes": "Targeted fix for top HASH_MISMATCH causes: (1) Ambiguous money amount ('chút tiền', 'ít tiền') forces ask_missing_info instead of inventing money; (2) IF-ELSE procedure executes alternative branch ('chưa tới thì', 'không thì') instead of stopping. Ready for Kaggle run."
+    "mean_score": 0.3454,
+    "act": 0.3592,
+    "ask": 0.1632,
+    "empty": 0.5455,
+    "avg_latency_s": 26.8,
+    "notes": "Ask F1 rebounded strongly from 0.0492 to 0.1632. Wrong Tool/Args held strong at 42 (14.0%). 4 samples crashed with VLLMValidationError due to max_ctx overflow (fixed in pipeline.py)."
   }
 }

@@ -5,7 +5,7 @@ Verifier dưới 0,4B tham số, chạy nhanh. Input là các action đã lưu t
 Điều kiện xong: điểm cuối không thấp hơn khi không có Verifier, mỗi mẫu thêm dưới 100 ms (PROJECT_OVERVIEW.md mục 5 và 5.3).
 
 ## Luồng dự định
-1. Smoke-test Laya-multilingual trên tiếng Việt (hạn 07/11)  [ ] ClickUp subtask: Smoke-test Laya tiếng Việt
+1. Smoke-test Laya-multilingual trên tiếng Việt (hạn 07/11)  [ ] ClickUp subtask: Smoke-test Laya tiếng Việt  (07/11: xong trên CPU, còn đo độ trễ GPU trên Kaggle)
    - Làm: chạy `lifemate/verifier/smoke_test_laya.py` trên Kaggle GPU, báo kết quả cho nhóm.
    - Đo: acc phân loại 5 app (có dấu, không dấu, phương ngữ, so với tiếng Anh), AUC câu hỏi có/không, AUC zero-shot bài Verifier, độ trễ p50/p95.
    - Dự phòng: tiếng Việt yếu (acc có dấu < 0,60 hoặc AUC có/không < 0,70) thì báo nhóm và chuyển sang bước 2 làm Verifier chính (luật + diff), theo 5.3d.
@@ -35,10 +35,19 @@ Verifier dưới 0,4B tham số, chạy nhanh. Input là các action đã lưu t
    - Làm: chốt checkpoint, ngưỡng, README module, ghi `docs/DECISIONS.md`, PR vào `main` trước tag `freeze-15-11`.
 
 ## Note tiến độ (mới nhất ở trên)
+- 07/11 (tối): Chạy smoke-test Laya thật trên CPU local (laya 0.4.27, torch 2.15 CPU, `convaiinnovations/laya-multilingual`, đếm được 321.908.995 tham số). Kết quả (bộ thử nhỏ, 10 đến 15 câu mỗi phần, chỉ để định hướng):
+  - A. Phân loại 5 app: có dấu 0,90, phương ngữ 0,90, tiếng Anh 1,00, không dấu 0,50 (đoán bừa 0,20). Tiếng Việt có dấu chỉ kém tiếng Anh 0,10.
+  - B. Có/không về chi tiết (số tiền, giờ, phủ định): AUC vi 0,72, en 0,86. Vừa qua ngưỡng gợi ý 0,70, tiếng Việt kém tiếng Anh rõ.
+  - C. Zero-shot bài Verifier: AUC 0,61. P(nhất quán) trung bình: plan đúng 0,63, ID bịa 0,22 (bắt được), lặp write 0,79 (KHÔNG bắt được, còn cao hơn plan đúng).
+  - Độ trễ CPU: p50 315 ms, p95 435 ms mỗi câu hỏi. Chưa đại diện cho A30, cần đo lại trên GPU Kaggle.
+  - Kết luận: Laya hiểu được tiếng Việt có dấu, đi tiếp fine-tune, chưa cần phương án dự phòng. Kết quả chi tiết: `runs/laya_smoke_cpu.json` (local, không commit).
+- 07/11 (tối): Viết và push `lifemate/verifier/diff.py` + 15 test (commit dc75eca): bắt ID bịa, lặp write/read, call sau ask, tool lạ, hỏi lại tham số đã biết; có `verdict` (Verifier luật làm mốc), `suggest` (bỏ call hay hỏi user), `to_text` (input cho Laya). Chưa đo trên dữ liệu thật.
 - 07/11: Đọc repo và tài liệu, tạo nhánh `verifier/ha`. Viết và push `lifemate/verifier/smoke_test_laya.py` (commit ea607b7): kiểm tra hiểu tiếng Việt, bắt chi tiết có/không, zero-shot bài Verifier, độ trễ. Đã chạy thử luồng script bằng module giả, CHƯA chạy model thật vì máy local không có GPU, sẽ chạy trên Kaggle. Tra model card: `laya-multilingual` 321,9M tham số, có `vi` trong danh sách ngôn ngữ, ship chưa hiệu chỉnh nhiệt độ, câu hỏi có/không có xu hướng báo "có" thấp.
 
 ## Quyết định và điểm đo
 - 07/11: Chấm câu hỏi có/không của Laya bằng AUC và acc ở ngưỡng tốt nhất, không dùng ngưỡng 0,5 cố định, vì model card ghi Laya chưa hiệu chỉnh và báo "có" thấp.
+- 07/11: Ghép hai tầng: `diff.py` bắt lỗi chắc chắn bằng code (lặp write, ID bịa), Laya chỉ lo phần ngữ nghĩa còn lại. Lý do: zero-shot Laya không bắt được lặp write (smoke-test phần C).
+- 07/11: Ứng viên thay Laya nếu Laya fine-tune không đạt (đã kiểm giấy phép trên Hugging Face). Vừa ngân sách khoảng 0,4B: `jhu-clsp/mmBERT-base` (MIT, khoảng 307M, chính là nền của Laya), `FacebookAI/xlm-roberta-base` (MIT, 279M), `microsoft/mdeberta-v3-base` (MIT, khoảng 278M). Loại: PhoBERT-base-v2 (AGPL-3.0), ViDeBERTa (không ghi giấy phép). Quá ngân sách, chỉ khi hạ ASR: `Qwen/Qwen3-Reranker-0.6B` (Apache-2.0, 596M). Viết `train.py` theo kiểu đổi được backbone bằng một tham số để so trên cùng dữ liệu.
 - Mốc so sánh: không Verifier (`verify_rounds=0`) F1 dev 0,3109, 24,3 s/mẫu; self-verify Qwen 2 lượt F1 0,3117, 31,0 s/mẫu (Vương đo 06/11). Verifier của Hà phải hơn mốc không Verifier mà gần như không thêm thời gian.
 
 ## Cần trao đổi

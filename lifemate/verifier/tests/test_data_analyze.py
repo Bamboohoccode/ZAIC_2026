@@ -6,13 +6,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from lifemate.verifier.analyze_errors import analyze_sample, summarize  # noqa: E402
-from lifemate.verifier.data import (_shift_iso, examples_from_pred, make_examples)  # noqa: E402
+from lifemate.verifier.data import (_extra_value, _shift_iso, examples_from_pred, make_examples)  # noqa: E402
 
 CAT = {
     "bank.search_contact": {"kind": "read", "parameters": {"properties": {"name": {}}}},
     "bank.get_balance": {"kind": "read", "parameters": {"properties": {}}},
     "bank.transfer": {"kind": "write", "parameters": {"required": ["contact_id", "amount"], "properties": {
-        "contact_id": {"x-ref": "bank.contacts"}, "amount": {"type": "integer"}, "note": {"type": "string"}}}},
+        "contact_id": {"x-ref": "bank.contacts"}, "amount": {"type": "integer"}, "note": {"type": "string"},
+        "channel": {"type": "string", "enum": ["app", "atm"]}}}},
     "bank.pay_bill": {"kind": "write", "parameters": {"properties": {"bill_id": {"x-ref": "bank.bills"}}}},
     "sys.ask_missing_info": {"kind": "meta", "parameters": {"properties": {"tool_name": {}, "params": {}}}},
 }
@@ -42,10 +43,23 @@ def test_make_examples_khong_query():
 def test_make_examples_co_query():
     rows = make_examples(ITEM, RESULTS, CAT, random.Random(0), with_query=True, neg_per_pos=10)
     kinds = {r["kind"] for r in rows if r["step"] == 1}
-    assert {"dung", "dup_read", "unseen_id", "swap_tool", "change_value", "drop_arg", "ask_instead"} <= kinds
+    assert {"dung", "dup_read", "unseen_id", "swap_tool", "change_value", "drop_arg", "add_arg", "ask_instead"} <= kinds
     assert all(r["text"].startswith("Yêu cầu mới nhất của người dùng: chuyển cho Lan") for r in rows)
     drop = next(r for r in rows if r["kind"] == "drop_arg")
     assert "note=" not in drop["text"].split("Kế hoạch mới:")[1]  # chỉ bỏ tham số không bắt buộc
+    add = next(r for r in rows if r["kind"] == "add_arg")
+    assert 'channel="app"' in add["text"] or 'channel="atm"' in add["text"]
+
+
+def test_extra_value():
+    rng = random.Random(0)
+    assert _extra_value({"type": "string", "enum": ["a"]}, "", "", rng) == "a"
+    assert _extra_value({"type": "string", "x-ref": "x"}, "q r", "", rng) is None
+    v = _extra_value({"type": "string"}, "chuyển cho Lan hai trăm nghìn", "", rng)
+    assert v and v in "chuyển cho Lan hai trăm nghìn" and len(v.split()) >= 2
+    assert _extra_value({"type": "string", "format": "date-time"}, "", 'x "2026-11-19T09:30:00+07:00" y', rng) == "2026-11-19T09:30:00+07:00"
+    assert _extra_value({"type": "string", "format": "date"}, "", "2026-11-19T09:30:00+07:00", rng) == "2026-11-19"
+    assert _extra_value({"type": "string"}, "từ thứ hai tới thứ sáu", "", rng, "date_to") is None
 
 
 def test_neg_per_pos_va_after_ask():

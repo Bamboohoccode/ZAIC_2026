@@ -12,6 +12,8 @@ Mỗi mẫu train có gold tool_calls g_0..g_n. Với bước k: state = action 
     swap_tool    đổi sang tool khác cùng app, cùng loại read/write
     change_value đổi giá trị tham số: số, ngày giờ ISO, enum
     drop_arg     bỏ một tham số không bắt buộc
+    add_arg      thêm một tham số không bắt buộc mà gold không có (lỗi thật nhiều nhất của Planner,
+                 35% call sai trên dev_v4): enum chọn bừa, chuỗi cắt từ lời user, ngày giờ có trong state
     ask_instead  hỏi user tham số mà gold đã có giá trị
 
 Lỗi thật (--pred): call của Planner trên mẫu train (không thuộc dev) khớp gold -> 1, không khớp -> 0.
@@ -40,7 +42,9 @@ sys.path.insert(0, str(REPO))
 from lifemate.verifier.diff import ASK_TOOL, Action, _blob, _seen, actions_from_item, to_text  # noqa: E402
 
 STATE_KINDS = ("dup_write", "dup_read", "unseen_id", "after_ask")
-QUERY_KINDS = ("swap_tool", "change_value", "drop_arg", "ask_instead")
+QUERY_KINDS = ("swap_tool", "change_value", "drop_arg", "add_arg", "ask_instead")
+DATE_NAME_RE = re.compile(r"date|time|since|until|deadline|(^|_)(from|to|start|end)$")
+ISO_RE = re.compile(r"\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:[+-]\d{2}:\d{2})?)?")
 
 
 def app_of(name):
@@ -93,6 +97,33 @@ def _changed(v, prop, rng):
     return None
 
 
+def _extra_value(prop, query, blob, rng, pname=""):
+    """Giá trị cho tham số Planner tự thêm, giống lỗi thật: enum, đoạn lời user, ngày giờ đã thấy."""
+    t = prop.get("type")
+    if prop.get("x-ref") or t in ("array", "object"):
+        return None
+    if prop.get("enum"):
+        return rng.choice(prop["enum"])
+    if t == "boolean":
+        return rng.random() < 0.5
+    if t in ("integer", "number"):
+        nums = [int(n) for n in re.findall(r"\b\d{1,3}\b", query)]
+        return rng.choice(nums) if nums else rng.randint(1, 5)
+    fmt = prop.get("format") or ("date" if DATE_NAME_RE.search(pname) else None)
+    if fmt in ("date-time", "date"):
+        found = [d for d in ISO_RE.findall(blob) if ("T" in d) == (fmt == "date-time")]
+        if not found and fmt == "date":
+            found = [d[:10] for d in ISO_RE.findall(blob)]
+        return rng.choice(found) if found else None
+    words = [w.strip(".,!?;:") for w in query.split()]
+    words = [w for w in words if w]
+    if len(words) < 2:
+        return None
+    n = rng.randint(2, min(4, len(words)))
+    i = rng.randint(0, len(words) - n)
+    return " ".join(words[i:i + n]).strip(" .,!?")
+
+
 def corruptions(item, gold, k, actions, catalog, rng, with_query):
     """Các plan SAI cho bước k: list (kind, plan). actions: state trước bước k (đã có kết quả)."""
     g = gold[k]
@@ -138,6 +169,12 @@ def corruptions(item, gold, k, actions, catalog, rng, with_query):
     if optional and name != ASK_TOOL:
         p = rng.choice(optional)
         out.append(("drop_arg", [{"name": name, "arguments": {q: v for q, v in args.items() if q != p}}]))
+    unused = [p for p in props if p not in args and p not in required]
+    if unused and name != ASK_TOOL:
+        p = rng.choice(unused)
+        v = _extra_value(props[p], item.get("audio_text", ""), blob, rng, p)
+        if v is not None:
+            out.append(("add_arg", [{"name": name, "arguments": {**args, p: v}}]))
     if args and name != ASK_TOOL:
         out.append(("ask_instead", [{"name": ASK_TOOL, "arguments": {"tool_name": name, "params": [rng.choice(list(args))]}}]))
     return out

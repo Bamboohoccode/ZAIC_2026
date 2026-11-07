@@ -378,15 +378,18 @@ def plan_step(llm, msgs, tools, trace, rounds, deadline, max_ctx=MAX_CTX):
     feedback = []
     # Truncate / prune msgs if approaching max_ctx to prevent VLLMValidationError
     safe_msgs = [dict(m) for m in msgs]
-    while len(safe_msgs) > 2 and llm.n_tokens(safe_msgs + feedback, tools) > max_ctx - MAX_NEW * 2:
-        shortened = False
-        for m in safe_msgs:
-            if m.get("role") == "tool" and len(m.get("content", "")) > 300:
-                m["content"] = m["content"][:300] + "... [truncated]"
-                shortened = True
-                break
-        if not shortened:
-            safe_msgs.pop(1)
+    # 1. Rút ngắn nội dung các kết quả tool đọc quá dài (> 200 ký tự)
+    for m in safe_msgs:
+        if m.get("role") == "tool" and len(m.get("content", "")) > 200:
+            m["content"] = m["content"][:200] + "... [truncated]"
+
+    # 2. Cắt tỉa nếu vẫn vượt ngưỡng token: CHỈ xoá tool/assistant trung gian, BẢO VỆ TUYỆT ĐỐI User Query và System
+    while len(safe_msgs) > 3 and llm.n_tokens(safe_msgs + feedback, tools) > max_ctx - MAX_NEW * 2:
+        drop_idx = next((i for i, m in enumerate(safe_msgs) if 1 <= i < len(safe_msgs) - 1 and m.get("role") in ("tool", "assistant")), None)
+        if drop_idx is not None:
+            safe_msgs.pop(drop_idx)
+        else:
+            break
 
     for attempt in range(rounds + 1):
         out = llm.chat([safe_msgs + feedback], tools)[0]
@@ -561,6 +564,7 @@ def main():
                 continue
             log_msg(f"[{i + 1}/{len(items)}] {item['id']} running...")
             t0 = time.time()  # the time limit covers ASR and mapper of this sample too
+            deadline = t0 + 120  # giới hạn tối đa 2 phút/mẫu, chống kẹt loop
             env = ToolEnv(a.split, item["id"], root=str(root))
             trace, raw, texts, keep = [], [], [], 0
             try:
@@ -579,7 +583,7 @@ def main():
                     msgs = build_messages(item, texts, keep)
                 if gold:
                     llm.queue = list(item["label"]["tool_calls"])
-                run_agent(env, llm, msgs, tools, catalog, trace, rounds, max_ctx=a.max_ctx)
+                run_agent(env, llm, msgs, tools, catalog, trace, rounds, deadline=deadline, max_ctx=a.max_ctx)
             except Exception as e:  # keep what already ran; a crash must still write the line
                 trace.append({"error": f"{type(e).__name__}: {str(e)[:300]}"})
             calls = env.get_tool_calls()

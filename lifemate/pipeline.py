@@ -595,11 +595,37 @@ def main():
             err = next((s["error"][:120] for s in trace if "error" in s), "")
             log_msg(f"[{i + 1}/{len(items)}] {item['id']} DONE calls={len(calls)} {dt:.1f}s {err}".strip())
 
+            # Định kỳ mỗi 10 mẫu tự động sao lưu sang Google Drive nếu đang chạy trên Colab
+            if (i + 1) % 10 == 0:
+                try:
+                    drive_dir = Path("/content/drive/MyDrive/ZAIC_2026_runs")
+                    if drive_dir.parent.exists():
+                        drive_dir.mkdir(parents=True, exist_ok=True)
+                        import shutil
+                        for f_sync in [a.out, log_path]:
+                            if os.path.exists(f_sync):
+                                shutil.copy(f_sync, drive_dir / Path(f_sync).name)
+                except Exception:
+                    pass
+
         total = time.time() - t_start
         log_msg(f"\n{len(items)} samples -> {a.out} | avg {total / max(len(items), 1):.1f}s/sample"
                 f" | agent > {TIME_LIMIT_S}s: {len(slow)}")
         for sid, dt in slow:
             log_msg(f"  {sid}: {dt}s")
+
+    # Tự động sao lưu toàn bộ kết quả sang Google Drive khi kết thúc
+    try:
+        drive_dir = Path("/content/drive/MyDrive/ZAIC_2026_runs")
+        if drive_dir.parent.exists():
+            drive_dir.mkdir(parents=True, exist_ok=True)
+            import shutil
+            for f_sync in [a.out, a.out + ".trace.jsonl", log_path]:
+                if os.path.exists(f_sync):
+                    shutil.copy(f_sync, drive_dir / Path(f_sync).name)
+            print(f"✅ Đã tự động sao lưu toàn bộ kết quả sang Google Drive: {drive_dir}")
+    except Exception as e:
+        pass
 
 
 if __name__ == "__main__":

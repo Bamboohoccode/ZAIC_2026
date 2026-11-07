@@ -1,0 +1,147 @@
+{"tool": "smart_home.get_status", "kind": "read", "sample": "train_0001", "args": {}, "status": "ok", "error": null}
+{"tool": "smart_home.light_set", "kind": "write", "sample": "train_0001", "args": {"device_id": "light_living"}, "status": "ok", "error": null}
+{"tool": "smart_home.fan_set", "kind": "write", "sample": "train_0001", "args": {"device_id": "light_living"}, "status": "ok", "error": null}
+{"tool": "smart_home.climate_set", "kind": "write", "sample": "train_0001", "args": {"device_id": "light_living", "mode": "cool"}, "status": "ok", "error": null}
+{"tool": "smart_home.switch_set", "kind": "write", "sample": "train_0001", "args": {"device_id": "light_living", "power": "on"}, "status": "ok", "error": null}
+{"tool": "smart_home.scene_run", "kind": "write", "sample": "train_0001", "args": {"scene_id": "test_id"}, "status": "ok", "error": null}
+{"tool": "home_security.list_alerts", "kind": "read", "sample": "train_0449", "args": {}, "status": "ok", "error": null}
+{"tool": "home_security.get_camera", "kind": "read", "sample": "train_0449", "args": {}, "status": "ok", "error": null}
+{"tool": "home_security.arm", "kind": "write", "sample": "train_0449", "args": {"mode": "away"}, "status": "ok", "error": null}
+{"tool": "home_security.acknowledge_alert", "kind": "write", "sample": "train_0449", "args": {"alert_id": "alert_01"}, "status": "ok", "error": null}
+{"tool": "door_lock.list_locks", "kind": "read", "sample": "train_0449", "args": {}, "status": "ok", "error": null}
+{"tool": "door_lock.set_lock", "kind": "write", "sample": "train_0449", "args": {"lock_id": "lock_01", "locked": true}, "status": "ok", "error": null}
+{"tool": "door_lock.grant_guest_code", "kind": "write", "sample": "train_0449", "args": {"lock_id": "lock_01", "valid_until": "2026-11-10T09:00:00"}, "status": "ok", "error": null}
+{"tool": "robot_vacuum.get_status", "kind": "read", "sample": "train_0450", "args": {}, "status": "ok", "error": null}
+{"tool": "robot_vacuum.start", "kind": "write", "sample": "train_0450", "args": {}, "status": "ok", "error": null}
+{"tool": "robot_vacuum.stop", "kind": "write", "sample": "train_0450", "args": {}, "status": "ok", "error": null}
+{"tool": "appliances.list", "kind": "read", "sample": "train_0450", "args": {}, "status": "ok", "error": null}
+{"tool": "appliances.start_cycle", "kind": "write", "sample": "train_0450", "args": {"appliance_id": "appl_01", "cycle": "test"}, "status": "ok", "error": null}
+{"tool": "appliances.stop", "kind": "write", "sample": "train_0450", "args": {"appliance_id": "appl_01"}, "status": "ok", "error": null}
+{"tool": "home_energy.get_usage", "kind": "read", "sample": "train_0443", "args": {"period": "today"}, "status": "ok", "error": null}
+{"tool": "home_energy.set_alert", "kind": "write", "sample": "train_0443", "args": {"threshold_kwh": 1}, "status": "ok", "error": null}
+{"tool": "alarm.list", "kind": "read", "sample": "train_0001", "args": {}, "status": "ok", "error": null}
+{"tool": "alarm.create", "kind": "write", "sample": "train_0001", "args": {"time": "test"}, "status": "ok", "error": null}
+{"tool": "alarm.update", "kind": "write", "sample": "train_0001", "args": {"alarm_id": "alm_01"}, "status": "ok", "error": null}
+{"tool": "alarm.delete", "kind": "write", "sample": "train_0001", "args": {"alarm_id": "alm_01"}, "status": "ok", "error": null}
+{"tool": "reminders.list", "kind": "read", "sample": "train_0001", "args": {}, "status": "ok", "error": null}
+{"tool": "reminders.create", "kind": "write", "sample": "train_0001", "args": {"content": "test", "time": "test"}, "status": "ok", "error": null}
+{"tool": "reminders.complete", "kind": "write", "sample": "train_0001", "args": {"reminder_id": "test_id"}, "status": "ok", "error": null}
+{"tool": "reminders.delete", "kind": "write", "sample": "train_0001", "args": {"reminder_id": "test_id"}, "status": "ok", "error": null}
+{"tool": "calendar.list_events", "kind": "read", "sample": "train_0001", "args": {}, "status": "ok", "error": null}
+{"tool": "calendar.create_event", "kind": "write", "sample": "train_0001", "args": {"title": "test", "start": "test"}, "status": "ok", "error": null}
+{"tool": "calendar.update_event", "kind": "write", "sample": "train_0001", "args": {"event_id": "evt_01"}, "status": "ok", "error": null}
+{"tool": "calendar.cancel_event", "kind": "write", "sample": "train_0001", "args": {"event_id": "evt_01"}, "status": "ok", "error": null}
+{"tool": "notes.list", "kind": "read", "sample": "train_0429", "args": {}, "status": "ok", "error": null}
+{"tool": "notes.create", "kind": "write", "sample": "train_0429", "args": {"content": "test"}, "status": "ok", "error": null}
+{"tool": "notes.append", "kind": "write", "sample": "train_0429", "args": {"note_id": "note_01", "content": "test"}, "status": "ok", "error": null}
+{"tool": "tasks.list", "kind": "read", "sample": "train_0429", "args": {}, "status": "ok", "error": null}
+{"tool": "tasks.add", "kind": "write", "sample": "train_0429", "args": {"title": "test"}, "status": "ok", "error": null}
+{"tool": "tasks.complete", "kind": "write", "sample": "train_0429", "args": {"task_id": "task_01"}, "status": "ok", "error": null}
+{"tool": "contacts.search", "kind": "read", "sample": "train_0001", "args": {}, "status": "ok", "error": null}
+{"tool": "contacts.get", "kind": "read", "sample": "train_0001", "args": {"contact_id": "c_01"}, "status": "ok", "error": null}
+{"tool": "contacts.update", "kind": "write", "sample": "train_0001", "args": {"contact_id": "c_01", "phone": "test"}, "status": "ok", "error": null}
+{"tool": "phone.call", "kind": "write", "sample": "train_0003", "args": {"contact_id": "test_id"}, "status": "ok", "error": null}
+{"tool": "phone.recent_calls", "kind": "read", "sample": "train_0003", "args": {}, "status": "ok", "error": null}
+{"tool": "sms.send", "kind": "write", "sample": "train_0001", "args": {"content": "test", "contact_id": "test_id"}, "status": "ok", "error": null}
+{"tool": "sms.read_recent", "kind": "read", "sample": "train_0001", "args": {}, "status": "ok", "error": null}
+{"tool": "chat_ott.list_chats", "kind": "read", "sample": "train_0002", "args": {}, "status": "ok", "error": null}
+{"tool": "chat_ott.read_chat", "kind": "read", "sample": "train_0002", "args": {"chat_id": "chat_01"}, "status": "ok", "error": null}
+{"tool": "chat_ott.send_message", "kind": "write", "sample": "train_0002", "args": {"chat_id": "chat_01", "content": "test"}, "status": "ok", "error": null}
+{"tool": "chat_ott.send_location", "kind": "write", "sample": "train_0002", "args": {"chat_id": "chat_01"}, "status": "ok", "error": null}
+{"tool": "chat_ott.call", "kind": "write", "sample": "train_0002", "args": {"chat_id": "chat_01"}, "status": "ok", "error": null}
+{"tool": "email.list", "kind": "read", "sample": "train_0429", "args": {}, "status": "ok", "error": null}
+{"tool": "email.read", "kind": "read", "sample": "train_0429", "args": {"email_id": "mail_01"}, "status": "ok", "error": null}
+{"tool": "email.send", "kind": "write", "sample": "train_0429", "args": {"to": ["test"], "subject": "test", "body": "test"}, "status": "ok", "error": null}
+{"tool": "email.create_draft", "kind": "write", "sample": "train_0429", "args": {"to": ["test"], "subject": "test", "body": "test"}, "status": "ok", "error": null}
+{"tool": "email.reply", "kind": "write", "sample": "train_0429", "args": {"email_id": "mail_01", "body": "test"}, "status": "ok", "error": null}
+{"tool": "email.archive", "kind": "write", "sample": "train_0429", "args": {"email_id": "mail_01", "action": "archive"}, "status": "ok", "error": null}
+{"tool": "video_meeting.list_meetings", "kind": "read", "sample": "train_0430", "args": {}, "status": "ok", "error": null}
+{"tool": "video_meeting.create", "kind": "write", "sample": "train_0430", "args": {"title": "test", "start": "2026-11-10T09:00:00"}, "status": "ok", "error": null}
+{"tool": "video_meeting.join", "kind": "write", "sample": "train_0430", "args": {"meeting_id": "meet_01"}, "status": "ok", "error": null}
+{"tool": "banking.get_balance", "kind": "read", "sample": "train_0001", "args": {}, "status": "ok", "error": null}
+{"tool": "banking.list_transactions", "kind": "read", "sample": "train_0001", "args": {}, "status": "ok", "error": null}
+{"tool": "banking.list_beneficiaries", "kind": "read", "sample": "train_0001", "args": {}, "status": "ok", "error": null}
+{"tool": "banking.transfer", "kind": "write", "sample": "train_0001", "args": {"from_account_id": "acc_01", "beneficiary_id": "ben_01", "amount": 1}, "status": "ok", "error": null}
+{"tool": "banking.open_savings", "kind": "write", "sample": "train_0001", "args": {"from_account_id": "acc_01", "amount": 1, "term_months": 1}, "status": "ok", "error": null}
+{"tool": "ewallet.get_balance", "kind": "read", "sample": "train_0001", "args": {}, "status": "ok", "error": null}
+{"tool": "ewallet.transfer", "kind": "write", "sample": "train_0001", "args": {"amount": 1, "contact_id": "test_id"}, "status": "ok", "error": null}
+{"tool": "ewallet.topup_mobile", "kind": "write", "sample": "train_0001", "args": {"phone": "test", "amount": 1}, "status": "ok", "error": null}
+{"tool": "ewallet.pay_qr", "kind": "write", "sample": "train_0001", "args": {"merchant_id": "test", "amount": 1}, "status": "ok", "error": null}
+{"tool": "bill_payment.list_bills", "kind": "read", "sample": "train_0003", "args": {}, "status": "ok", "error": null}
+{"tool": "bill_payment.pay", "kind": "write", "sample": "train_0003", "args": {"bill_id": "bill_01", "source": "bank"}, "status": "ok", "error": null}
+{"tool": "bill_payment.schedule_autopay", "kind": "write", "sample": "train_0003", "args": {"type": "test", "enabled": true}, "status": "ok", "error": null}
+{"tool": "loyalty.list_vouchers", "kind": "read", "sample": "train_0919", "args": {}, "status": "ok", "error": null}
+{"tool": "loyalty.get_points", "kind": "read", "sample": "train_0919", "args": {}, "status": "ok", "error": null}
+{"tool": "loyalty.redeem", "kind": "write", "sample": "train_0919", "args": {"program": "test", "reward_id": "test"}, "status": "ok", "error": null}
+{"tool": "weather.get_current", "kind": "read", "sample": "train_0001", "args": {}, "status": "ok", "error": null}
+{"tool": "weather.get_forecast", "kind": "read", "sample": "train_0001", "args": {"date": "test"}, "status": "ok", "error": null}
+{"tool": "gold_price.get_price", "kind": "read", "sample": "train_0001", "args": {}, "status": "ok", "error": null}
+{"tool": "fuel_price.get_price", "kind": "read", "sample": "train_0001", "args": {}, "status": "ok", "error": null}
+{"tool": "lottery.get_results", "kind": "read", "sample": "train_0922", "args": {"province": "test"}, "status": "ok", "error": null}
+{"tool": "lottery.check_ticket", "kind": "read", "sample": "train_0922", "args": {"province": "test", "date": "test", "number": "test"}, "status": "ok", "error": null}
+{"tool": "exchange_rate.get_rate", "kind": "read", "sample": "train_0921", "args": {"from_currency": "test", "to_currency": "test"}, "status": "ok", "error": null}
+{"tool": "exchange_rate.convert", "kind": "read", "sample": "train_0921", "args": {"amount": 0, "from_currency": "test", "to_currency": "test"}, "status": "ok", "error": null}
+{"tool": "news.headlines", "kind": "read", "sample": "train_0431", "args": {}, "status": "ok", "error": null}
+{"tool": "news.search", "kind": "read", "sample": "train_0431", "args": {"query": "test"}, "status": "ok", "error": null}
+{"tool": "news.save", "kind": "write", "sample": "train_0431", "args": {"article_id": "art_01"}, "status": "ok", "error": null}
+{"tool": "calculator.calculate", "kind": "read", "sample": "train_0435", "args": {"expression": "test"}, "status": "ok", "error": null}
+{"tool": "calculator.convert_unit", "kind": "read", "sample": "train_0435", "args": {"value": 1, "from_unit": "mm", "to_unit": "mm"}, "status": "ok", "error": null}
+{"tool": "maps.search_place", "kind": "read", "sample": "train_0428", "args": {"query": "test"}, "status": "ok", "error": null}
+{"tool": "maps.get_route", "kind": "read", "sample": "train_0428", "args": {"origin": "test", "destination": "test"}, "status": "ok", "error": null}
+{"tool": "maps.save_place", "kind": "write", "sample": "train_0428", "args": {"place_id": "place_01", "label": "test"}, "status": "ok", "error": null}
+{"tool": "food_delivery.list_restaurants", "kind": "read", "sample": "train_0001", "args": {}, "status": "ok", "error": null}
+{"tool": "food_delivery.get_menu", "kind": "read", "sample": "train_0001", "args": {"restaurant_id": "rest_01"}, "status": "ok", "error": null}
+{"tool": "food_delivery.order_history", "kind": "read", "sample": "train_0001", "args": {}, "status": "ok", "error": null}
+{"tool": "food_delivery.place_order", "kind": "write", "sample": "train_0001", "args": {"restaurant_id": "rest_01", "items": [{}]}, "status": "ok", "error": null}
+{"tool": "food_delivery.cancel_order", "kind": "write", "sample": "train_0001", "args": {"order_id": "test_id"}, "status": "ok", "error": null}
+{"tool": "ride_hailing.get_quotes", "kind": "read", "sample": "train_0003", "args": {"pickup": "test", "dropoff": "test"}, "status": "ok", "error": null}
+{"tool": "ride_hailing.book", "kind": "write", "sample": "train_0003", "args": {"pickup": "test", "dropoff": "test", "vehicle": "bike"}, "status": "ok", "error": null}
+{"tool": "ride_hailing.cancel", "kind": "write", "sample": "train_0003", "args": {"ride_id": "test_id"}, "status": "ok", "error": null}
+{"tool": "ride_hailing.get_ride", "kind": "read", "sample": "train_0003", "args": {}, "status": "ok", "error": null}
+{"tool": "flights.search", "kind": "read", "sample": "train_0453", "args": {"origin": "test", "destination": "test", "date": "test"}, "status": "ok", "error": null}
+{"tool": "flights.book", "kind": "write", "sample": "train_0453", "args": {"flight_id": "fl_01", "passengers": 1}, "status": "ok", "error": null}
+{"tool": "flights.my_bookings", "kind": "read", "sample": "train_0453", "args": {}, "status": "ok", "error": null}
+{"tool": "flights.cancel", "kind": "write", "sample": "train_0453", "args": {"booking_id": "test_id"}, "status": "ok", "error": null}
+{"tool": "flights.check_in", "kind": "write", "sample": "train_0453", "args": {"booking_id": "test_id"}, "status": "ok", "error": null}
+{"tool": "shopping_list.get", "kind": "read", "sample": "train_0435", "args": {}, "status": "ok", "error": null}
+{"tool": "shopping_list.add", "kind": "write", "sample": "train_0435", "args": {"name": "test"}, "status": "ok", "error": null}
+{"tool": "shopping_list.remove", "kind": "write", "sample": "train_0435", "args": {"item_id": "item_01"}, "status": "ok", "error": null}
+{"tool": "shopping_list.check", "kind": "write", "sample": "train_0435", "args": {"item_id": "item_01"}, "status": "ok", "error": null}
+{"tool": "package_tracking.track", "kind": "read", "sample": "train_0452", "args": {}, "status": "ok", "error": null}
+{"tool": "package_tracking.reschedule_delivery", "kind": "write", "sample": "train_0452", "args": {"tracking_id": "test", "time": "test"}, "status": "ok", "error": null}
+{"tool": "package_tracking.schedule_pickup", "kind": "write", "sample": "train_0452", "args": {"address": "test", "date": "2026-11-10"}, "status": "ok", "error": null}
+{"tool": "music.list_tracks", "kind": "read", "sample": "train_0003", "args": {}, "status": "ok", "error": null}
+{"tool": "music.play", "kind": "write", "sample": "train_0003", "args": {"track_id": "trk_01"}, "status": "ok", "error": null}
+{"tool": "music.control", "kind": "write", "sample": "train_0003", "args": {"action": "pause"}, "status": "ok", "error": null}
+{"tool": "music.add_to_playlist", "kind": "write", "sample": "train_0003", "args": {"track_id": "trk_01", "playlist_id": "pl_01"}, "status": "ok", "error": null}
+{"tool": "tv.guide", "kind": "read", "sample": "train_0001", "args": {}, "status": "ok", "error": null}
+{"tool": "tv.tune", "kind": "write", "sample": "train_0001", "args": {"channel": "test"}, "status": "ok", "error": null}
+{"tool": "tv.control", "kind": "write", "sample": "train_0001", "args": {"action": "on"}, "status": "ok", "error": null}
+{"tool": "tv.record", "kind": "write", "sample": "train_0001", "args": {"program_id": "test_id"}, "status": "ok", "error": null}
+{"tool": "podcast_radio.search", "kind": "read", "sample": "train_0436", "args": {"query": "test"}, "status": "ok", "error": null}
+{"tool": "podcast_radio.play", "kind": "write", "sample": "train_0436", "args": {"episode_id": "ep_01"}, "status": "ok", "error": null}
+{"tool": "podcast_radio.subscribe", "kind": "write", "sample": "train_0436", "args": {"show_id": "show_01"}, "status": "ok", "error": null}
+{"tool": "podcast_radio.queue", "kind": "write", "sample": "train_0436", "args": {"episode_id": "ep_01"}, "status": "ok", "error": null}
+{"tool": "medication.list", "kind": "read", "sample": "train_0001", "args": {}, "status": "ok", "error": null}
+{"tool": "medication.add", "kind": "write", "sample": "train_0001", "args": {"name": "test", "times": ["test"]}, "status": "ok", "error": null}
+{"tool": "medication.log_taken", "kind": "write", "sample": "train_0001", "args": {"schedule_id": "test_id"}, "status": "ok", "error": null}
+{"tool": "medication.remove", "kind": "write", "sample": "train_0001", "args": {"schedule_id": "test_id"}, "status": "ok", "error": null}
+{"tool": "fitness.get_activity", "kind": "read", "sample": "train_0477", "args": {}, "status": "ok", "error": null}
+{"tool": "fitness.log_workout", "kind": "write", "sample": "train_0477", "args": {"type": "walking", "minutes": 1}, "status": "ok", "error": null}
+{"tool": "fitness.set_goal", "kind": "write", "sample": "train_0477", "args": {"steps": 1}, "status": "ok", "error": null}
+{"tool": "learning.list_courses", "kind": "read", "sample": "train_0436", "args": {}, "status": "ok", "error": null}
+{"tool": "learning.enroll", "kind": "write", "sample": "train_0436", "args": {"course_id": "course_01"}, "status": "ok", "error": null}
+{"tool": "learning.schedule_lesson", "kind": "write", "sample": "train_0436", "args": {"course_id": "course_01", "time": "2026-11-10T09:00:00"}, "status": "ok", "error": null}
+{"tool": "learning.log_progress", "kind": "write", "sample": "train_0436", "args": {"course_id": "course_01", "minutes": 1}, "status": "ok", "error": null}
+{"tool": "bike_rental.find_bikes", "kind": "read", "sample": "train_0437", "args": {}, "status": "ok", "error": null}
+{"tool": "bike_rental.reserve", "kind": "write", "sample": "train_0437", "args": {"bike_id": "bike_01"}, "status": "ok", "error": null}
+{"tool": "home_automation.list_rules", "kind": "read", "sample": "train_0469", "args": {}, "status": "ok", "error": null}
+{"tool": "home_automation.create_rule", "kind": "write", "sample": "train_0469", "args": {"device_id": "test_id", "action": "on", "time": "09:00"}, "status": "ok", "error": null}
+{"tool": "home_automation.delete_rule", "kind": "write", "sample": "train_0469", "args": {"rule_id": "rule_01"}, "status": "ok", "error": null}
+{"tool": "household_chores.list_chores", "kind": "read", "sample": "train_0450", "args": {}, "status": "ok", "error": null}
+{"tool": "household_chores.assign", "kind": "write", "sample": "train_0450", "args": {"assignee": "test", "chore_id": "chore_01"}, "status": "ok", "error": null}
+{"tool": "library.search", "kind": "read", "sample": "train_0434", "args": {}, "status": "ok", "error": null}
+{"tool": "library.reserve", "kind": "write", "sample": "train_0434", "args": {"book_id": "book_01"}, "status": "ok", "error": null}
+{"tool": "subscriptions.list", "kind": "read", "sample": "train_0446", "args": {}, "status": "ok", "error": null}
+{"tool": "subscriptions.cancel", "kind": "write", "sample": "train_0446", "args": {"subscription_id": "sub_01"}, "status": "ok", "error": null}
+{"tool": "sys.ask_missing_info", "kind": "meta", "sample": "train_0001", "args": {"tool_name": "sms.send", "params": ["contact_id"]}, "status": "ok", "error": null}

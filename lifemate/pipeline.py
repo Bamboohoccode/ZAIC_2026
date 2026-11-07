@@ -468,6 +468,7 @@ def main():
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--log", help="path to log file (default: <out>.log)")
+    ap.add_argument("--resume", action="store_true", help="skip samples already present in --out and append new results")
     a = ap.parse_args()
     gold = a.llm == "gold"
     rounds = 0 if gold else a.verify_rounds
@@ -525,9 +526,21 @@ def main():
     llm = GoldLLM() if gold else VLLM(a.llm, a.llm_lora, a.gpu_mem, a.seed, a.max_ctx, MAX_NEW, None, a.eager)
     slow = []
     log_path = a.log or (a.out + ".log")
-    with open(a.out, "w", encoding="utf-8") as fout, \
-         open(a.out + ".trace.jsonl", "w", encoding="utf-8") as ftr, \
-         open(log_path, "w", encoding="utf-8") as flog:
+    done_ids = set()
+    if a.resume and os.path.exists(a.out):
+        for l in open(a.out, encoding="utf-8"):
+            if l.strip():
+                try:
+                    row = json.loads(l)
+                    if "id" in row:
+                        done_ids.add(row["id"])
+                except Exception:
+                    pass
+
+    out_mode = "a" if (a.resume and done_ids) else "w"
+    with open(a.out, out_mode, encoding="utf-8") as fout, \
+         open(a.out + ".trace.jsonl", out_mode, encoding="utf-8") as ftr, \
+         open(log_path, out_mode, encoding="utf-8") as flog:
 
         def log_msg(msg=""):
             print(msg, flush=True)
@@ -538,10 +551,14 @@ def main():
         log_msg(f"Start: {datetime.now().isoformat()}")
         log_msg(f"Output: {a.out} | Trace: {a.out}.trace.jsonl | Log: {log_path}")
         log_msg(f"Split: {a.split} | Total samples: {len(items)}")
+        if done_ids:
+            log_msg(f"Resume active: {len(done_ids)}/{len(items)} samples already finished in {a.out}")
         if a.prompt:
             log_msg(f"Prompt: {a.prompt}")
 
         for i, item in enumerate(items):
+            if a.resume and item["id"] in done_ids:
+                continue
             t0 = time.time()  # the time limit covers ASR and mapper of this sample too
             env = ToolEnv(a.split, item["id"], root=str(root))
             trace, raw, texts, keep = [], [], [], 0
@@ -572,6 +589,8 @@ def main():
                                   ensure_ascii=False) + "\n")
             ftr.write(json.dumps({"id": item["id"], "raw_texts": raw, "mapped_texts": texts,
                                   "kept_history": keep, "steps": trace, "seconds": round(dt, 2)}, ensure_ascii=False) + "\n")
+            fout.flush()
+            ftr.flush()
             err = next((s["error"][:120] for s in trace if "error" in s), "")
             log_msg(f"[{i + 1}/{len(items)}] {item['id']} calls={len(calls)} {dt:.1f}s {err}".strip())
 

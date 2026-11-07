@@ -1,5 +1,6 @@
 # Dữ liệu BTC: luật cấm phát tán, không commit
 data/
+*.zip
 
 # Trọng số và output suy luận
 *.safetensors

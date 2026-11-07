@@ -559,6 +559,7 @@ def main():
         for i, item in enumerate(items):
             if a.resume and item["id"] in done_ids:
                 continue
+            log_msg(f"[{i + 1}/{len(items)}] {item['id']} running...")
             t0 = time.time()  # the time limit covers ASR and mapper of this sample too
             env = ToolEnv(a.split, item["id"], root=str(root))
             trace, raw, texts, keep = [], [], [], 0
@@ -592,7 +593,7 @@ def main():
             fout.flush()
             ftr.flush()
             err = next((s["error"][:120] for s in trace if "error" in s), "")
-            log_msg(f"[{i + 1}/{len(items)}] {item['id']} calls={len(calls)} {dt:.1f}s {err}".strip())
+            log_msg(f"[{i + 1}/{len(items)}] {item['id']} DONE calls={len(calls)} {dt:.1f}s {err}".strip())
 
         total = time.time() - t_start
         log_msg(f"\n{len(items)} samples -> {a.out} | avg {total / max(len(items), 1):.1f}s/sample"

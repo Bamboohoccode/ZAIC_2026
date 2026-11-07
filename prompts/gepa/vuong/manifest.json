@@ -52,5 +52,14 @@
     "empty": 0.5455,
     "avg_latency_s": 28.01,
     "notes": "Minimal Surgery on planner_v1: All-time high Mean F1 0.3597 (+0.0480 vs baseline) and Act F1 0.3831. Missed ask dropped to 8 (2.7%). Net +22 samples improved vs baseline. (CURRENT CHAMPION PROMPT)"
+  },
+  "planner_v5": {
+    "file": "planner_v5.txt",
+    "mean_score": null,
+    "act": null,
+    "ask": null,
+    "empty": null,
+    "avg_latency_s": null,
+    "notes": "Targeted fix for top HASH_MISMATCH causes: (1) Ambiguous money amount ('chút tiền', 'ít tiền') forces ask_missing_info instead of inventing money; (2) IF-ELSE procedure executes alternative branch ('chưa tới thì', 'không thì') instead of stopping. Ready for Kaggle run."
   }
 }

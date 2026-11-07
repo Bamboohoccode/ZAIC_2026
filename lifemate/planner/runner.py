@@ -57,18 +57,21 @@ def plan_step(llm, msgs, tools, trace, rounds, deadline, system_prompt, max_ctx=
     query = msgs[-1]["content"] if msgs[-1]["role"] == "user" else next(m["content"] for m in reversed(msgs) if m["role"] == "user")
     feedback = []
 
-    # Safe context pruning: protect User Query and System, only prune intermediate tool/assistant messages
+    # Safe context pruning: CHỈ cắt tỉa khi tổng token THỰC SỰ vượt ngưỡng max_ctx
     safe_msgs = [dict(m) for m in msgs]
-    for m in safe_msgs:
-        if m.get("role") == "tool" and len(m.get("content", "")) > 200:
-            m["content"] = m["content"][:200] + "... [truncated]"
+    if llm.n_tokens(safe_msgs + feedback, tools) > max_ctx - MAX_NEW * 2:
+        # 1. Rút ngắn các kết quả tool đọc quá dài (> 800 ký tự) nếu bị quá tải context
+        for m in safe_msgs:
+            if m.get("role") == "tool" and len(m.get("content", "")) > 800:
+                m["content"] = m["content"][:800] + "... [truncated]"
 
-    while len(safe_msgs) > 3 and llm.n_tokens(safe_msgs + feedback, tools) > max_ctx - MAX_NEW * 2:
-        drop_idx = next((i for i, m in enumerate(safe_msgs) if 1 <= i < len(safe_msgs) - 1 and m.get("role") in ("tool", "assistant")), None)
-        if drop_idx is not None:
-            safe_msgs.pop(drop_idx)
-        else:
-            break
+        # 2. Xoá dần các tool/assistant trung gian cũ, BẢO VỆ TUYỆT ĐỐI User Query và System
+        while len(safe_msgs) > 3 and llm.n_tokens(safe_msgs + feedback, tools) > max_ctx - MAX_NEW * 2:
+            drop_idx = next((i for i, m in enumerate(safe_msgs) if 1 <= i < len(safe_msgs) - 1 and m.get("role") in ("tool", "assistant")), None)
+            if drop_idx is not None:
+                safe_msgs.pop(drop_idx)
+            else:
+                break
 
     for attempt in range(rounds + 1):
         n_toks = llm.n_tokens(safe_msgs + feedback, tools)

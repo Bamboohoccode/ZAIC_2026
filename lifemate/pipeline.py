@@ -404,12 +404,17 @@ def plan_step(llm, msgs, tools, trace, rounds, deadline, max_ctx=MAX_CTX):
 
 
 def run_agent(env, llm, msgs, tools, catalog, trace, rounds=VERIFY_ROUNDS, deadline=float("inf"), max_ctx=MAX_CTX):
+    from lifemate.validator.validator import validate_and_guard_calls
     done = set()
     for _ in range(MAX_STEPS):
         if time.time() > deadline:  # keep the calls that already ran
             trace.append({"error": "time limit"})
             return
         out, calls = plan_step(llm, msgs, tools, trace, rounds, deadline, max_ctx=max_ctx)
+        if not calls:
+            return
+        query = msgs[-1]["content"] if msgs[-1]["role"] == "user" else next((m["content"] for m in reversed(msgs) if m["role"] == "user"), "")
+        calls = validate_and_guard_calls(calls, catalog, msgs, query)
         if not calls:
             return
         ai = len(msgs)
@@ -459,15 +464,35 @@ def main():
     ap.add_argument("--text", action="store_true", help="use audio_text instead of ASR (train only)")
     ap.add_argument("--ids", help="path to a text file with IDs to run (e.g. eval/splits/dev_ids.txt)")
     ap.add_argument("--prompt", help="path to custom system prompt template file")
+    ap.add_argument("--mapper-prompt", help="path to custom dialect mapper prompt file")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--log", help="path to log file (default: <out>.log)")
     a = ap.parse_args()
     gold = a.llm == "gold"
     rounds = 0 if gold else a.verify_rounds
-    global SYSTEM
+    global SYSTEM, MAPPER_SYSTEM, MAPPER_SHOTS
     if a.prompt:
         SYSTEM = open(a.prompt, encoding="utf-8").read()
+    if a.mapper_prompt:
+        content = open(a.mapper_prompt, encoding="utf-8").read()
+        if "### EXAMPLES" in content:
+            sys_part, examples_part = content.split("### EXAMPLES", 1)
+            MAPPER_SYSTEM = sys_part.strip()
+            custom_shots = []
+            for pair in examples_part.strip().split("\n\n"):
+                lines = [l.strip() for l in pair.split("\n") if l.strip()]
+                if len(lines) == 1 and " -> " in lines[0]:
+                    parts = lines[0].lstrip("- ").split(" -> ")
+                    custom_shots.append((parts[0].strip('"\' '), parts[1].strip('"\' ')))
+                elif len(lines) >= 2:
+                    q = re.sub(r"^(User|Q|Hỏi):\s*", "", lines[0], flags=re.I)
+                    ans = re.sub(r"^(Assistant|A|Trả lời):\s*", "", lines[1], flags=re.I)
+                    custom_shots.append((q.strip('"\' '), ans.strip('"\' ')))
+            if custom_shots:
+                MAPPER_SHOTS = custom_shots
+        else:
+            MAPPER_SYSTEM = content.strip()
 
     os.environ.setdefault("VLLM_ENABLE_V1_MULTIPROCESSING", "0")  # in-process engine: reproducible, freeable
     random.seed(a.seed)

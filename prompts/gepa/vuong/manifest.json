@@ -61,5 +61,19 @@
     "empty": 0.5455,
     "avg_latency_s": 26.8,
     "notes": "Ask F1 rebounded strongly from 0.0492 to 0.1632. Wrong Tool/Args held strong at 42 (14.0%). 4 samples crashed with VLLMValidationError due to max_ctx overflow (fixed in pipeline.py)."
+  },
+  "planner_v4_guarded": {
+    "file": "planner_v4.txt + lifemate/validator",
+    "mean_score": 0.3760,
+    "act": 0.3719,
+    "ask": 0.3100,
+    "empty": 0.5455,
+    "avg_latency_s": 28.01,
+    "notes": "Safe Hash Guard & Schema Validator integrated directly into pipeline: Ambiguity Guard (catches >1 contact/bike lookups), Vague Slot Guard ('chút tiền' without numbers -> sys.ask_missing_info), English room mapping ('living room' -> 'phòng khách'), Parameter Hygiene. Reaches new record Mean F1 0.3760 and Ask F1 0.3100 (+135%)."
+  },
+  "mapper_v1": {
+    "file": "mapper_v1.txt",
+    "type": "dialect_mapper",
+    "notes": "Specialized prompt for Qwen3-0.6B dialect mapper to normalize North/Central/South dialectal words ('chiều ni', 'chừ', 'buồng ngủ', 'kênh nớ') into standard Vietnamese while preserving entities, quantities, and timestamps intact."
   }
 }

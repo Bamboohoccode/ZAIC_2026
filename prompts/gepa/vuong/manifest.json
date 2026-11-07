@@ -24,7 +24,7 @@
     "ask": 0.1989,
     "empty": 0.5000,
     "avg_latency_s": 27.05,
-    "notes": "Rules for write after read, slot ambiguity ask, and self-cancellation. Ask F1 jumped 0.0810->0.1989 (+145%), Mean F1 +0.0406"
+    "notes": "Rules for write after read, slot ambiguity ask, and self-cancellation. Ask F1 jumped 0.0810->0.1989 (+145%), Mean F1 +0.0406 (Current Best Overall)"
   },
   "planner_v2": {
     "file": "planner_v2.txt",
@@ -33,15 +33,15 @@
     "ask": 0.0854,
     "empty": 0.5909,
     "avg_latency_s": 29.62,
-    "notes": "Minimal arguments rule reduced WRONG_TOOL_OR_ARGS from 53 down to 41 (-22.6%). Act F1 0.3665, Empty F1 0.5909. However, ask recall fell back to 0.0854 due to over-aggressive write priority over disambiguation."
+    "notes": "Minimal arguments rule reduced WRONG_TOOL_OR_ARGS from 53 down to 41 (-22.6%). Act F1 0.3665 (Highest Act)."
   },
   "planner_v3": {
     "file": "planner_v3.txt",
-    "mean_score": null,
-    "act": null,
-    "ask": null,
-    "empty": null,
-    "avg_latency_s": null,
-    "notes": "Fusion of V1 + V2: Disambiguation priority over write (ban choosing randomly when >=2 results), full IF-ELSE conditional logic (execute branch 2 when 'chưa tới/không thì'), and minimal parameters rule."
+    "mean_score": 0.3294,
+    "act": 0.3507,
+    "ask": 0.0492,
+    "empty": 0.6364,
+    "avg_latency_s": 27.04,
+    "notes": "Empty F1 reached 0.6364 (highest), but Ask F1 dropped to 0.0492 due to prompt bloat and diluted attention on ask_missing_info."
   }
 }

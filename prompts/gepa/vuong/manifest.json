@@ -71,6 +71,11 @@
     "avg_latency_s": 17.1,
     "notes": "Full End-to-End Cloud GPU execution of Champion planner_v4 with Safe Hash Guard on all 300 dev samples. Ask F1 achieves all-time high 0.3200 (+295% vs baseline 0.0810). Average latency dropped to record 17.1s/sample (only 36/300 samples >30s)."
   },
+  "planner_v6": {
+    "file": "planner_v6.txt",
+    "type": "planner",
+    "notes": "GEPA Iteration 6: Targeted fix for 71.7% of HASH_MISMATCH errors. 1) Unlocks the 'ELSE' branch ('không thì', 'chưa tới thì') in conditional requests instead of prematurely stopping. 2) Explicit prohibition against hallucinating optional arguments (NO room in light_set, NO label/date_from in alarm.create, NO note in transfer). Ready for benchmarking."
+  },
   "mapper_v1": {
     "file": "mapper_v1.txt",
     "type": "dialect_mapper",

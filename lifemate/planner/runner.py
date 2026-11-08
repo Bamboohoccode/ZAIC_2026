@@ -14,6 +14,7 @@ import os
 import random
 import re
 import shutil
+import signal
 import sys
 import time
 from datetime import datetime
@@ -291,6 +292,21 @@ def main():
             deadline = t0 + 120
             env = ToolEnv(a.split, item["id"], root=str(root))
             trace, raw, texts, keep = [], [], [], 0
+
+            # Giải phóng và dọn dẹp prefix cache định kỳ để chống phân mảnh VRAM qua hàng trăm mẫu
+            if hasattr(llm, "llm") and hasattr(llm.llm, "reset_prefix_cache"):
+                try:
+                    llm.llm.reset_prefix_cache()
+                except Exception:
+                    pass
+
+            # Khống chế ngắt cưỡng bức (Hard Timeout) sau 120s bằng tín hiệu hệ điều hành SIGALRM
+            if hasattr(signal, "SIGALRM"):
+                def _handle_timeout(signum, frame):
+                    raise TimeoutError("Sample hard timeout (120s exceeded)")
+                signal.signal(signal.SIGALRM, _handle_timeout)
+                signal.alarm(120)
+
             try:
                 turns = [h for h in item["history"] if h["role"] == "user"] + [item]
                 raw = [u["audio_text"] for u in turns] if a.text else run_asr(asr, [root / a.split / u["audio"] for u in turns])
@@ -311,6 +327,10 @@ def main():
                 run_agent(env, llm, msgs, tools, catalog, trace, system_prompt, rounds=rounds, deadline=deadline, max_ctx=a.max_ctx, log_msg=log_msg)
             except Exception as e:
                 trace.append({"error": f"{type(e).__name__}: {str(e)[:300]}"})
+                log_msg(f"  -> [Sample Error / Timeout]: {type(e).__name__}: {str(e)[:150]}")
+            finally:
+                if hasattr(signal, "SIGALRM"):
+                    signal.alarm(0)  # Huỷ hẹn giờ báo động sau khi mẫu kết thúc
 
             calls = env.get_tool_calls()
             dt = time.time() - t0

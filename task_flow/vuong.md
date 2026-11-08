@@ -13,6 +13,7 @@ Nhánh: `planner/vuong` (hoặc `gepa/vuong`). Hạn: đóng băng 15/11, nộp 
 | D5 | Thử nghiệm Planner bằng `--text` (audio_text) để cô lập khả năng suy luận logic | Tránh nhiễu từ ASR khi tối ưu prompt và validator |
 | D6 | GEPA chạy thủ công trong chat trước (agent phân tích failure trace, sửa có kiểm chứng) | Miễn phí, linh hoạt, kiểm soát từng thay đổi |
 | D7 | **Dữ liệu thực tế `sys.ask_missing_info`:** Trong 217 mẫu train, 100% nằm ở call cuối cùng (60 mẫu hỏi ngay, 157 mẫu hỏi sau khi gọi tool đọc). Đặc biệt: 78/217 mẫu (36%) hỏi tham số **không nằm trong `required`** (do user nói mập mờ). | Rule máy móc "thiếu required mới hỏi" chỉ bắt được tối đa ~64% mẫu gold ask. Validator & Planner cần phân biệt giữa thiếu required và thông tin mơ hồ. |
+| D8 | **Giải mã 147 ca HASH_MISMATCH:** 71.7% lỗi hash tập trung ở 2 nguyên nhân cốt lõi: (1) 110 ca bỏ sót nhánh ngược lại ("không thì", "chưa tới thì") do hiểu máy móc luật dừng khi điều kiện sai; (2) 105 ca tự ý điền tham số tuỳ chọn (room, label, note...) làm sai hash. | Cần mở khóa nhánh ELSE và siết chặt quy tắc tham số tối thiểu trong prompt `planner_v6.txt`. |
 
 ---
 
@@ -28,7 +29,7 @@ Nhánh: `planner/vuong` (hoặc `gepa/vuong`). Hạn: đóng băng 15/11, nộp 
 | 6 | Ablation Verify Rounds: đo Planner thuần túy (`verify_rounds=0`) vs `verify_rounds=2` | 10/11 | Đo latency và F1; bàn giao kết quả làm baseline sạch cho Laya của Hà | Sẵn sàng đo sau Bước 2 |
 | 7 | State module: Hybrid tracker (bảng Known Entities & Actions bền vững) | 11/11 | Không mất ID quan trọng khi cắt tỉa history, giảm token | *Tạm dừng chờ Kiệt thống nhất nền chung* |
 | 8 | Ablation Mapper trên dev: không mapper vs Qwen3-0.6B vs mapper prompt trong Qwen3-4B | 11/11 | Đo điểm cuối + latency + ngân sách tham số | *Chờ xác nhận vai trò với Khánh & Tiên* |
-| 9 | Vòng lặp GEPA (Planner `planner_vN.txt` & Mapper `mapper_vN.txt`): lưu version có rollback | 12/11-14/11 | Prompt tối ưu trong `prompts/gepa/vuong/` đạt dev score cao hơn baseline | Chờ sau Bước 6 & 8 |
+| 9 | Vòng lặp GEPA (Planner `planner_vN.txt` & Mapper `mapper_vN.txt`): lưu version có rollback | 12/11-14/11 | Prompt tối ưu trong `prompts/gepa/vuong/` đạt dev score cao hơn baseline | Đang chạy vòng 6 (`planner_v6.txt`), đã lưu v1-v6 |
 | 10 | Kiểm tra End-to-End ASR + Mapper, latency $\le$ 30s/mẫu trên GPU A30 | 14/11 | Chốt bản nộp đơn của Vương, sẵn sàng cho Ensemble cùng Kiệt | |
 | 11 | Ensemble prompt cùng Kiệt & Đóng băng giải pháp (`freeze-15-11`) | 15/11 | Nộp Docker trước 16/11 23:59 | |
 
@@ -56,3 +57,7 @@ Nhánh: `planner/vuong` (hoặc `gepa/vuong`). Hạn: đóng băng 15/11, nộp 
   - Trụ cột 1 (Safe Hash Guard & Schema Validator): Xây dựng `lifemate/validator/validator.py` và tích hợp thẳng vào `run_agent` trong `lifemate/pipeline.py`. Bộ lọc tự động chặn mơ hồ danh bạ/xe đạp khi tra cứu ra $\ge 2$ kết quả, phát hiện từ chỉ số lượng mập mờ ("chút tiền") chuyển thành `sys.ask_missing_info`, chuẩn hoá tên phòng tiếng Anh sang tiếng Việt (`smart_home`), làm sạch tham số thừa (`repeat='once'`). Điểm mô phỏng trên dev_v4 bứt phá kỷ lục mới: Mean F1 đạt 0.3760 (+0.0163), Ask F1 tăng vọt lên 0.3100 (+135%), lỗi HASH_MISMATCH giảm còn 126 ca. Bộ test unit `tests/test_validator.py` pass 100%.
   - Trụ cột 3 (Dialect Mapper Prompt): Bổ sung cờ `--mapper-prompt` vào `lifemate/pipeline.py` và biên soạn prompt chuyên biệt `prompts/gepa/vuong/mapper_v1.txt` (chuẩn hoá "chiều ni", "chừ", "buồng ngủ", "kênh nớ", giữ nguyên thực thể/giờ/tiền).
   - Trụ cột 2 & 4: Đã sẵn sàng chạy benchmark thực tế trên Kaggle GPU để xác nhận điểm số live và chuẩn bị chiến lược Ensemble.
+- 08/11 (sáng/trưa): Hoàn thành benchmark trọn vẹn 300 mẫu dev cho `dev_v4_guarded` trên Cloud GPU:
+  - Kết quả thực tế: Ask F1 đạt kỷ lục mới 0.3200 (+295% so với baseline 0.0810), tốc độ xử lý nhanh nhất lịch sử (17.1s/mẫu, chỉ 36 mẫu > 30s). Toàn bộ log, trace và run được lưu trữ vĩnh viễn tại `optimize/gepa/vuong/eval_results/`.
+  - Chẩn đoán sâu 147 ca HASH_MISMATCH (chiếm ~50% tập dev): Phát hiện 71.7% lỗi nằm ở 2 "bẫy": (1) 110 ca bị nuốt mất nhánh ELSE ("không thì", "chưa tới thì") do Rule 3 của V4 bảo "nếu điều kiện sai thì dừng"; (2) 105 ca tự bịa tham số tuỳ chọn (`room` trong `light_set`, `label`/`date_from` trong `alarm.create`, `note` trong `banking.transfer`) làm lệch hash.
+  - Ra mắt champion prompt mới `planner_v6.txt`: Mở khóa nhánh ELSE cho yêu cầu có điều kiện, cấm triệt để việc điền tham số tuỳ chọn khi user không nói. Chuẩn bị hoàn tất `notebooks/colab_run_planner.ipynb` sẵn sàng chạy benchmark v6.

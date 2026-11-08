@@ -336,6 +336,7 @@ def main():
                         for f_sync in [a.out, log_path]:
                             if os.path.exists(f_sync):
                                 shutil.copy(f_sync, drive_dir / Path(f_sync).name)
+                                os.system(f"cp -f '{f_sync}' '{drive_dir}/' 2>/dev/null")
                 except Exception:
                     pass
 

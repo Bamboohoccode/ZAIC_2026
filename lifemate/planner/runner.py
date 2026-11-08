@@ -52,8 +52,6 @@ from lifemate.pipeline import (
     unseen_ids,
 )
 
-from lifemate.validator.validator import validate_and_guard_calls
-
 
 def format_custom_messages(item, texts, keep, prompt_template):
     """Xây dựng chuỗi messages chuẩn với prompt tùy chỉnh của Planner (thay thế prompt mặc định)."""
@@ -132,17 +130,6 @@ def run_agent(env, llm, msgs, tools, catalog, trace, system_prompt, rounds=VERIF
         if not calls:
             if log_msg:
                 log_msg(f"  [Step {step_i + 1}] No tool calls -> Agent finished.")
-            return
-        query = msgs[-1]["content"] if msgs[-1]["role"] == "user" else next((m["content"] for m in reversed(msgs) if m["role"] == "user"), "")
-        # Apply Safe Hash Guard & Schema Validator
-        orig_names = [c["name"] for c in calls]
-        calls = validate_and_guard_calls(calls, catalog, msgs, query)
-        guarded_names = [c["name"] for c in calls]
-        if orig_names != guarded_names and log_msg:
-            log_msg(f"    -> [Safe Hash Guard] {orig_names} -> {guarded_names}")
-        if not calls:
-            if log_msg:
-                log_msg(f"    -> [Safe Hash Guard] Filtered calls to empty -> Agent finished.")
             return
         ai = len(msgs)
         msgs.append(assistant_msg(re.sub(r"<tool_call>.*?</tool_call>", "", out, flags=re.S).strip(), calls))

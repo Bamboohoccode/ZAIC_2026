@@ -14,6 +14,7 @@ Nhánh: `planner/vuong` (hoặc `gepa/vuong`). Hạn: đóng băng 15/11, nộp 
 | D6 | GEPA chạy thủ công trong chat trước (agent phân tích failure trace, sửa có kiểm chứng) | Miễn phí, linh hoạt, kiểm soát từng thay đổi |
 | D7 | **Dữ liệu thực tế `sys.ask_missing_info`:** Trong 217 mẫu train, 100% nằm ở call cuối cùng (60 mẫu hỏi ngay, 157 mẫu hỏi sau khi gọi tool đọc). Đặc biệt: 78/217 mẫu (36%) hỏi tham số **không nằm trong `required`** (do user nói mập mờ). | Rule máy móc "thiếu required mới hỏi" chỉ bắt được tối đa ~64% mẫu gold ask. Validator & Planner cần phân biệt giữa thiếu required và thông tin mơ hồ. |
 | D8 | **Giải mã 147 ca HASH_MISMATCH:** 71.7% lỗi hash tập trung ở 2 nguyên nhân cốt lõi: (1) 110 ca bỏ sót nhánh ngược lại ("không thì", "chưa tới thì") do hiểu máy móc luật dừng khi điều kiện sai; (2) 105 ca tự ý điền tham số tuỳ chọn (room, label, note...) làm sai hash. | Cần mở khóa nhánh ELSE và siết chặt quy tắc tham số tối thiểu trong prompt `planner_v6.txt`. |
+| D9 | **Loại bỏ Rule-based Validator để chống Overfitting Test thật:** Phát hiện luật cứng theo app trong validator.py (như tự ép hỏi lại khi có >1 xe đạp) gây overfit và làm mất oan 23 ca điểm thật. Quyết định: Chuyển 100% logic sang Prompt Planner V7 thuần túy, không dùng code Python can thiệp nhằm tối ưu năng lực zero-shot tổng quát cho mọi app lạ ở Private Test. | Đảm bảo giải pháp mạnh mẽ, an toàn tuyệt đối khi chấm thi trên tập test ẩn của BTC. |
 
 ---
 
@@ -29,7 +30,7 @@ Nhánh: `planner/vuong` (hoặc `gepa/vuong`). Hạn: đóng băng 15/11, nộp 
 | 6 | Ablation Verify Rounds: đo Planner thuần túy (`verify_rounds=0`) vs `verify_rounds=2` | 10/11 | Đo latency và F1; bàn giao kết quả làm baseline sạch cho Laya của Hà | Sẵn sàng đo sau Bước 2 |
 | 7 | State module: Hybrid tracker (bảng Known Entities & Actions bền vững) | 11/11 | Không mất ID quan trọng khi cắt tỉa history, giảm token | *Tạm dừng chờ Kiệt thống nhất nền chung* |
 | 8 | Ablation Mapper trên dev: không mapper vs Qwen3-0.6B vs mapper prompt trong Qwen3-4B | 11/11 | Đo điểm cuối + latency + ngân sách tham số | *Chờ xác nhận vai trò với Khánh & Tiên* |
-| 9 | Vòng lặp GEPA (Planner `planner_vN.txt` & Mapper `mapper_vN.txt`): lưu version có rollback | 12/11-14/11 | Prompt tối ưu trong `prompts/gepa/vuong/` đạt dev score cao hơn baseline | Đang chạy vòng 6 (`planner_v6.txt`), đã lưu v1-v6 |
+| 9 | Vòng lặp GEPA (Planner `planner_vN.txt` & Mapper `mapper_vN.txt`): lưu version có rollback | 12/11-14/11 | Prompt tối ưu trong `prompts/gepa/vuong/` đạt dev score cao hơn baseline | Đang chạy vòng 7 (`planner_v7.txt`, `dev_v7_pure`), đã lưu v1-v7 |
 | 10 | Kiểm tra End-to-End ASR + Mapper, latency $\le$ 30s/mẫu trên GPU A30 | 14/11 | Chốt bản nộp đơn của Vương, sẵn sàng cho Ensemble cùng Kiệt | |
 | 11 | Ensemble prompt cùng Kiệt & Đóng băng giải pháp (`freeze-15-11`) | 15/11 | Nộp Docker trước 16/11 23:59 | |
 
@@ -61,3 +62,8 @@ Nhánh: `planner/vuong` (hoặc `gepa/vuong`). Hạn: đóng băng 15/11, nộp 
   - Kết quả thực tế: Ask F1 đạt kỷ lục mới 0.3200 (+295% so với baseline 0.0810), tốc độ xử lý nhanh nhất lịch sử (17.1s/mẫu, chỉ 36 mẫu > 30s). Toàn bộ log, trace và run được lưu trữ vĩnh viễn tại `optimize/gepa/vuong/eval_results/`.
   - Chẩn đoán sâu 147 ca HASH_MISMATCH (chiếm ~50% tập dev): Phát hiện 71.7% lỗi nằm ở 2 "bẫy": (1) 110 ca bị nuốt mất nhánh ELSE ("không thì", "chưa tới thì") do Rule 3 của V4 bảo "nếu điều kiện sai thì dừng"; (2) 105 ca tự bịa tham số tuỳ chọn (`room` trong `light_set`, `label`/`date_from` trong `alarm.create`, `note` trong `banking.transfer`) làm lệch hash.
   - Ra mắt champion prompt mới `planner_v6.txt`: Mở khóa nhánh ELSE cho yêu cầu có điều kiện, cấm triệt để việc điền tham số tuỳ chọn khi user không nói. Chuẩn bị hoàn tất `notebooks/colab_run_planner.ipynb` sẵn sàng chạy benchmark v6.
+- 08/11 (chiều/tối): Đột phá kỷ lục Ask F1 với `dev_v6_real` và Chuyển hướng sang Pure Prompt Planner V7:
+  - Kết quả `dev_v6_real` (300 mẫu trên Cloud GPU): Mean F1 tăng lên 0.3167 (+0.0293), Act F1 hồi phục 0.2867, Ask F1 bứt phá lập kỷ lục mọi thời đại 0.3893 (+380% so với baseline 0.0810). Lỗi bỏ sót ask (MISSED_ASK) giảm xuống chỉ còn 9 ca (3.0%), sai tham số chạm đáy 44 ca (14.7%). Có 9 mẫu từ 0.0 điểm biến thành 1.0 điểm hoàn hảo nhờ luật tự hủy và nhánh ELSE.
+  - Giải mã 145 ca HASH_MISMATCH còn lại: Phát hiện lỗi Overfitting nghiêm trọng của tầng Rule-based Validator (`validator.py`): luật tự động ép hỏi lại khi trạm xe có >1 xe đã "chặn họng" 23 ca mà user đã chọn xe rõ ràng, biến thành 0 điểm oan.
+  - Quyết định kiến trúc bước ngoặt: Gỡ bỏ hoàn toàn `validator.py` khỏi pipeline runner. Chuyển toàn bộ cơ chế phát hiện mập mờ (tiền không rõ con số "chút tiền", trùng tên người nhận) thành luật đanh thép trực tiếp trong prompt `planner_v7.txt`.
+  - Chuẩn bị sẵn sàng `dev_v7_pure` trong `notebooks/colab_run_planner.ipynb` để benchmark 100% Pure Prompt zero-shot an toàn tuyệt đối cho bài thi chính thức.

@@ -234,8 +234,16 @@ def main():
     except ImportError:
         pass
 
-    root = Path(a.root)
-    sys.path.insert(0, str(root / a.split))
+    root = Path(a.root).resolve()
+    for candidate_dir in [root / a.split, Path("/content/data") / a.split, Path("/content/ZAIC_2026/data") / a.split]:
+        if candidate_dir.exists() and (candidate_dir / "zaic_tools").exists():
+            root = candidate_dir.parent
+            if str(candidate_dir) not in sys.path:
+                sys.path.insert(0, str(candidate_dir))
+            break
+    else:
+        if str(root / a.split) not in sys.path:
+            sys.path.insert(0, str(root / a.split))
     from zaic_tools import ToolEnv
     catalog = {t["name"]: t for app in json.load(open(root / a.split / f"{a.split}_tools_catalog.json", encoding="utf-8"))["apps"]
                for t in app["tools"]}

@@ -43,6 +43,8 @@ from lifemate.pipeline import (
     run_asr,
     tool_specs,
     build_messages,
+    date_table,
+    hints,
     clip,
     assistant_msg,
     parse_calls,
@@ -51,6 +53,21 @@ from lifemate.pipeline import (
 )
 
 from lifemate.validator.validator import validate_and_guard_calls
+
+
+def format_custom_messages(item, texts, keep, prompt_template):
+    """Xây dựng chuỗi messages chuẩn với prompt tùy chỉnh của Planner (thay thế prompt mặc định)."""
+    msgs = build_messages(item, texts, keep)
+    if prompt_template:
+        ctx = item["context"]
+        msgs[0]["content"] = prompt_template.format(
+            now=ctx["current_time"],
+            tz=ctx["timezone"],
+            dates=date_table(ctx["current_time"]) + hints(texts[-1]),
+            loc=json.dumps(ctx.get("location"), ensure_ascii=False),
+            profile=json.dumps(ctx.get("user_profile"), ensure_ascii=False),
+        )
+    return msgs
 
 
 def plan_step(llm, msgs, tools, trace, rounds, deadline, system_prompt, max_ctx=MAX_CTX, log_msg=None):
@@ -316,10 +333,10 @@ def main():
                 log_msg(f"[{i + 1}/{len(items)}] {item['id']} START: \"{query_snippet}\"")
                 tools = tool_specs(item, catalog)
                 keep = len(texts) - 1
-                msgs = build_messages(item, texts, keep)
+                msgs = format_custom_messages(item, texts, keep, system_prompt)
                 while keep and llm.n_tokens(msgs, tools) > a.max_ctx - MAX_NEW * 2:
                     keep -= 1
-                    msgs = build_messages(item, texts, keep)
+                    msgs = format_custom_messages(item, texts, keep, system_prompt)
                 init_tokens = llm.n_tokens(msgs, tools)
                 log_msg(f"  -> Context: history_turns={len(item.get('history', []))}, tools={len(tools)}, tokens={init_tokens}")
                 if gold:

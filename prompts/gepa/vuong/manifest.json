@@ -74,7 +74,16 @@
   "planner_v6": {
     "file": "planner_v6.txt",
     "type": "planner",
-    "notes": "GEPA Iteration 6: Targeted fix for 71.7% of HASH_MISMATCH errors. 1) Unlocks the 'ELSE' branch ('không thì', 'chưa tới thì') in conditional requests instead of prematurely stopping. 2) Explicit prohibition against hallucinating optional arguments (NO room in light_set, NO label/date_from in alarm.create, NO note in transfer). Ready for benchmarking."
+    "notes": "GEPA Iteration 6: Targeted fix for 71.7% of HASH_MISMATCH errors. 1) Unlocks the 'ELSE' branch ('không thì', 'chưa tới thì') in conditional requests instead of prematurely stopping. 2) Explicit prohibition against hallucinating optional arguments (NO room in light_set, NO label/date_from in alarm.create, NO note in transfer)."
+  },
+  "planner_v6_guarded": {
+    "file": "planner_v6.txt + lifemate/validator",
+    "mean_score": 0.2874,
+    "act": 0.2604,
+    "ask": 0.3279,
+    "empty": 0.5000,
+    "avg_latency_s": 22.7,
+    "notes": "Full End-to-End Cloud GPU execution of dev_v6_guarded on all 300 dev samples. Ask F1 reaches record 0.3279. Audit revealed custom prompt was not injected into msgs[0] in runner.py; runner.py now patched with format_custom_messages."
   },
   "mapper_v1": {
     "file": "mapper_v1.txt",

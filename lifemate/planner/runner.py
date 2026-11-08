@@ -370,7 +370,7 @@ def main():
                     drive_dir = Path("/content/drive/MyDrive/ZAIC_2026_runs")
                     if drive_dir.parent.exists():
                         drive_dir.mkdir(parents=True, exist_ok=True)
-                        for f_sync in [a.out, log_path]:
+                        for f_sync in [a.out, log_path, a.out + ".trace.jsonl"]:
                             if os.path.exists(f_sync):
                                 shutil.copy(f_sync, drive_dir / Path(f_sync).name)
                                 os.system(f"cp -f '{f_sync}' '{drive_dir}/' 2>/dev/null")

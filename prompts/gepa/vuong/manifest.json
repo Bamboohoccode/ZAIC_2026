@@ -121,6 +121,11 @@
     "avg_latency_s": 8.5,
     "notes": "Full End-to-End Cloud GPU execution of Planner V9 on all 300 dev samples. Contrastive Mini-Examples set all-time project records for lowest WRONG_TOOL_OR_ARGS (35 errors, 11.7%) and lowest FALSE_ACT (8 errors, 2.7%), while Empty F1 tied project peak at 0.6364. Rescued key samples like train_1665 (0.0 -> 1.0) and train_0965 (0.0 -> 1.0). However, pure prompt attention alone remains bounded for contact collision resolution on 4B."
   },
+  "planner_v10": {
+    "file": "planner_v10.txt",
+    "type": "planner",
+    "notes": "GEPA Iteration 10: Surgical 3-Chamber Pure Prompt targeting the 155 HASH_MISMATCH cases (60% of all errors). 1) Action Checklist in CoT to stop premature halt on multi-intent requests (48 cases). 2) Filtered Uniqueness & Counting CoT to separate collision from criteria-based disambiguation (44 cases). 3) Literal Fidelity to fix number/email/unit name mutations (27 cases)."
+  },
   "mapper_v1": {
     "file": "mapper_v1.txt",
     "type": "dialect_mapper",

@@ -94,10 +94,19 @@
     "avg_latency_s": 29.9,
     "notes": "Real injection of planner_v6 prompt with Safe Hash Guard on all 300 dev samples. Mean F1 recovers to 0.3167 (+0.0293 vs un-injected). Ask F1 skyrockets to all-time record 0.3893 (+380% relative vs baseline 0.0810). Missed ask errors drop to 9 (3.0%). Wrong tool or args hits lowest ever 44 (14.7%). Net +12 samples improved (9 new 1.0 perfect samples)."
   },
-  "planner_v7": {
-    "file": "planner_v7.txt",
+  "planner_v7_pure": {
+    "file": "planner_v7.txt (Pure Prompt)",
+    "mean_score": 0.2969,
+    "act": 0.3091,
+    "ask": 0.0977,
+    "empty": 0.5455,
+    "avg_latency_s": 25.1,
+    "notes": "GEPA Iteration 7 (100% Pure Prompt, zero validator.py reliance). Act F1 jumps to 0.3091 (+18.7% relative gain) and Wrong Tool/Args hits all-time low 39 (13.0%), proving removal of hardcoded validator rescues valid bike/context actions. Ask F1 drops to 0.0977 revealing model tendency to invent missing required arguments."
+  },
+  "planner_v8": {
+    "file": "planner_v8.txt",
     "type": "planner",
-    "notes": "GEPA Iteration 7: 100% Pure Prompt Planner (zero validator.py rule reliance to prevent test-set overfitting). Teaches the 4B LLM to strictly detect missing amount ('chút tiền') and contact name collisions to call sys.ask_missing_info, while preserving bike_rental.reserve and actions when criteria are explicit."
+    "notes": "GEPA Iteration 8: Master Fusion of V7 (Act peak 0.3091, low args 13%) and V6 (Ask peak 0.3893). Features: 1) Universal missing required parameter rule across all apps (steps, time, channel, number, chore_id, start, mode). 2) Multi-task execution ordering (complete well-specified tasks before asking for under-specified task). 3) Explicit criteria-based selection for follow-up turns."
   },
   "mapper_v1": {
     "file": "mapper_v1.txt",

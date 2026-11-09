@@ -112,6 +112,11 @@
     "avg_latency_s": 8.5,
     "notes": "Full End-to-End Cloud GPU execution of Planner V8 on all 300 dev samples. Act F1 reaches new all-time high of 0.3128 (+17.2% vs baseline). WRONG_TOOL_OR_ARGS drops to historical minimum of 37 (12.3%). Multi-task execution ordering succeeded in repairing samples like train_0392 (0.00 -> 0.67) and train_0378 (0.00 -> 1.00). Ask F1 remains at 0.0933 in pure prompt without runtime validator."
   },
+  "planner_v9": {
+    "file": "planner_v9.txt",
+    "type": "planner",
+    "notes": "GEPA Iteration 9: Pure Prompt with Contrastive Mini-Examples (Micro Few-Shot). Solves collision and missing-slot detection without runtime python guards. Includes in-line contrastive demonstrations for contact collisions (Minh -> 2 contacts vs 1 contact), bike selection with/without criteria, and missing required slots (steps, amount). Aiming to boost Ask F1 to >= 0.25 - 0.30+ while preserving Act F1 >= 0.31."
+  },
   "mapper_v1": {
     "file": "mapper_v1.txt",
     "type": "dialect_mapper",

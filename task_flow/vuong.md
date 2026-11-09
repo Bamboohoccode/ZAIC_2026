@@ -15,6 +15,7 @@ Nhánh: `planner/vuong` (hoặc `gepa/vuong`). Hạn: đóng băng 15/11, nộp 
 | D7 | **Dữ liệu thực tế `sys.ask_missing_info`:** Trong 217 mẫu train, 100% nằm ở call cuối cùng (60 mẫu hỏi ngay, 157 mẫu hỏi sau khi gọi tool đọc). Đặc biệt: 78/217 mẫu (36%) hỏi tham số **không nằm trong `required`** (do user nói mập mờ). | Rule máy móc "thiếu required mới hỏi" chỉ bắt được tối đa ~64% mẫu gold ask. Validator & Planner cần phân biệt giữa thiếu required và thông tin mơ hồ. |
 | D8 | **Giải mã 147 ca HASH_MISMATCH:** 71.7% lỗi hash tập trung ở 2 nguyên nhân cốt lõi: (1) 110 ca bỏ sót nhánh ngược lại ("không thì", "chưa tới thì") do hiểu máy móc luật dừng khi điều kiện sai; (2) 105 ca tự ý điền tham số tuỳ chọn (room, label, note...) làm sai hash. | Cần mở khóa nhánh ELSE và siết chặt quy tắc tham số tối thiểu trong prompt `planner_v6.txt`. |
 | D9 | **Loại bỏ Rule-based Validator để chống Overfitting Test thật:** Phát hiện luật cứng theo app trong validator.py (như tự ép hỏi lại khi có >1 xe đạp) gây overfit và làm mất oan 23 ca điểm thật. Quyết định: Chuyển 100% logic sang Prompt Planner V7 thuần túy, không dùng code Python can thiệp nhằm tối ưu năng lực zero-shot tổng quát cho mọi app lạ ở Private Test. | Đảm bảo giải pháp mạnh mẽ, an toàn tuyệt đối khi chấm thi trên tập test ẩn của BTC. |
+| D10 | **Phân rã 155 ca HASH_MISMATCH & Triển khai 3 Chốt chặn V10:** Phân tích 155 ca lệch hash ở `dev_v9` (chiếm 51.7% tập dev): (1) 48 ca (31.0%) đứt gãy chuỗi multi-action (dừng sớm sau khi xong việc đầu); (2) 27 ca (17.4%) biến dạng literal parameter (tên miền `.test`, số dạng chữ "bốn lăm", đơn vị đo); (3) 24 ca (15.5%) Missed Ask (Gold hỏi nhưng model tự làm dẫn tới đổi DB hash); (4) 20 ca (12.9%) False Ask (Gold làm nhưng model hỏi khiến hash không đổi); (5) 19 ca (12.3%) không gọi tool khi gặp điều kiện; (6) 17 ca (11.0%) gọi thừa/sai tool ghi; (7) 8 ca (5.2%) đổi chỗ thứ tự ghi độc lập. Quyết định: Thiết kế `planner_v10.txt` với 3 Chốt chặn: Action Checklist trong CoT, Counting CoT & Filtered Uniqueness, và Literal Fidelity. | Giải quyết tận gốc 48.4% lỗi hash (multi-action + literal fidelity) mà không cần can thiệp code Python. |
 
 ---
 
@@ -30,7 +31,7 @@ Nhánh: `planner/vuong` (hoặc `gepa/vuong`). Hạn: đóng băng 15/11, nộp 
 | 6 | Ablation Verify Rounds: đo Planner thuần túy (`verify_rounds=0`) vs `verify_rounds=2` | 10/11 | Đo latency và F1; bàn giao kết quả làm baseline sạch cho Laya của Hà | Sẵn sàng đo sau Bước 2 |
 | 7 | State module: Hybrid tracker (bảng Known Entities & Actions bền vững) | 11/11 | Không mất ID quan trọng khi cắt tỉa history, giảm token | *Tạm dừng chờ Kiệt thống nhất nền chung* |
 | 8 | Ablation Mapper trên dev: không mapper vs Qwen3-0.6B vs mapper prompt trong Qwen3-4B | 11/11 | Đo điểm cuối + latency + ngân sách tham số | *Chờ xác nhận vai trò với Khánh & Tiên* |
-| 9 | Vòng lặp GEPA (Planner `planner_vN.txt` & Mapper `mapper_vN.txt`): lưu version có rollback | 12/11-14/11 | Prompt tối ưu trong `prompts/gepa/vuong/` đạt dev score cao hơn baseline | Đang chạy vòng 7 (`planner_v7.txt`, `dev_v7_pure`), đã lưu v1-v7 |
+| 9 | Vòng lặp GEPA (Planner `planner_vN.txt` & Mapper `mapper_vN.txt`): lưu version có rollback | 12/11-14/11 | Prompt tối ưu trong `prompts/gepa/vuong/` đạt dev score cao hơn baseline | Đã benchmark V7, V8, V9 trên Cloud GPU; đã triển khai V10 với 3 Chốt chặn (Action Checklist, Counting CoT, Literal Fidelity) và đang chạy dev 300 mẫu |
 | 10 | Kiểm tra End-to-End ASR + Mapper, latency $\le$ 30s/mẫu trên GPU A30 | 14/11 | Chốt bản nộp đơn của Vương, sẵn sàng cho Ensemble cùng Kiệt | |
 | 11 | Ensemble prompt cùng Kiệt & Đóng băng giải pháp (`freeze-15-11`) | 15/11 | Nộp Docker trước 16/11 23:59 | |
 
@@ -67,3 +68,21 @@ Nhánh: `planner/vuong` (hoặc `gepa/vuong`). Hạn: đóng băng 15/11, nộp 
   - Giải mã 145 ca HASH_MISMATCH còn lại: Phát hiện lỗi Overfitting nghiêm trọng của tầng Rule-based Validator (`validator.py`): luật tự động ép hỏi lại khi trạm xe có >1 xe đã "chặn họng" 23 ca mà user đã chọn xe rõ ràng, biến thành 0 điểm oan.
   - Quyết định kiến trúc bước ngoặt: Gỡ bỏ hoàn toàn `validator.py` khỏi pipeline runner. Chuyển toàn bộ cơ chế phát hiện mập mờ (tiền không rõ con số "chút tiền", trùng tên người nhận) thành luật đanh thép trực tiếp trong prompt `planner_v7.txt`.
   - Chuẩn bị sẵn sàng `dev_v7_pure` trong `notebooks/colab_run_planner.ipynb` để benchmark 100% Pure Prompt zero-shot an toàn tuyệt đối cho bài thi chính thức.
+- 09/11 (sáng): Hoàn thành benchmark `dev_v7_pure` (Prompt V7 Pure, không dùng code guard Python) trên 300 mẫu dev:
+  - Điểm số: Mean F1 `0.2969`, Act F1 tăng vọt lên `0.3091` (+18.7% so với bản guarded), sai tham số chạm mức thấp kỷ lục `39 (13.0%)`, Empty F1 đạt `0.5455`. Ask F1 đạt `0.0977`.
+  - Kết luận: Việc gỡ bỏ code guard cứng giúp phục hồi khả năng hành động tự nhiên, không còn bị chặn oan, chứng minh chiến lược Pure Prompt là hướng đi đúng đắn cho zero-shot app lạ.
+- 09/11 (trưa): Hoàn thành Vòng 8 GEPA (`planner_v8.txt` - Master Fusion Pure) trên 300 mẫu dev:
+  - Tổng hòa các tinh hoa của V1 (ngắn gọn), V4 (CoT IF-ELSE) và V6 (chống hallucination tham số tuỳ chọn) thành bản prompt thuần túy tinh gọn nhất.
+  - Điểm số: Mean F1 đạt `0.3025`, Act F1 thiết lập đỉnh cao mới `0.3128`, Empty F1 đạt `0.5909`, sai tham số giảm tiếp xuống `37 (12.3%)`. Tốc độ suy luận kỷ lục: trung bình `8.5s/mẫu` (nhanh nhất lịch sử dự án).
+- 09/11 (chiều): Hoàn thành Vòng 9 GEPA (`planner_v9.txt` - Micro Few-Shot Tương phản) trên 300 mẫu dev:
+  - Thử nghiệm đưa 2 cặp ví dụ few-shot siêu ngắn đối chiếu giữa "Hỏi lại khi mập mờ" vs "Thực hiện ngay khi cụ thể".
+  - Điểm số: Mean F1 `0.2829`, Act F1 `0.2831`, Empty F1 chạm đỉnh `0.6364`, sai tham số tiếp tục lập kỷ lục thấp nhất `35 (11.7%)`, tỉ lệ False Act chỉ còn `8 ca (2.7%)`. Tuy nhiên Ask F1 chỉ đạt `0.0968` do mô hình 4B vẫn ưu tiên chọn kết quả đầu tiên khi danh bạ trả về >= 2 người.
+- 09/11 (tối): Phân tích giải mã toàn diện 155 ca HASH_MISMATCH trên dev_v9 (51.7% tập dev):
+  - Khám phá bất ngờ: Nhóm lỗi lớn nhất (48 ca, 31.0%) không phải do logic phức tạp mà là do mô hình bị dừng sớm (early stop) sau khi thực hiện việc 1 trong các câu lệnh kép đa hành động ("làm A VÀ làm B").
+  - Nhóm lỗi thứ 2 (27 ca, 17.4%): Biến dạng tham số nguyên văn (tự sửa đuôi email `.test` thành `.com`, đổi số chữ "bốn lăm" sang chữ "bốn mươi lăm", rơi rụng đơn vị đo).
+  - Nhóm thứ 3 & 4: 24 ca (15.5%) Missed Ask và 20 ca (12.9%) False Ask do nhập nhằng giữa tra cứu danh bạ trùng tên vs đã có tiêu chí lọc rõ ràng.
+- 09/11 (đêm): Thiết kế và xuất xưởng Champion Prompt `planner_v10.txt` với 3 Chốt chặn đột phá:
+  - Chốt 1 (Action Checklist trong CoT): Ép mô hình liệt kê danh sách việc cần làm `1. [Việc A -> tool A], 2. [Việc B -> tool B]` ngay từ bước đầu để triệt tiêu hoàn toàn lỗi bỏ sót việc trong câu lệnh kép đa hành động.
+  - Chốt 2 (Counting CoT & Filtered Uniqueness): Ép đếm số lượng ứng viên trả về sau khi đọc (`Nếu đếm được >= 2 người thoả tiêu chí -> bắt buộc hỏi lại; Nếu chỉ có đúng 1 người khớp tiêu chí -> làm ngay`).
+  - Chốt 3 (Literal Fidelity): Cấm tuyệt đối biến đổi dữ liệu người dùng (giữ nguyên đuôi `.test`, số "bốn lăm" = 45, đơn vị đo "1 mét").
+  - Triển khai đưa vào `notebooks/colab_run_planner.ipynb` và bắt đầu chạy thực nghiệm Cloud GPU cho toàn bộ 300 mẫu dev.

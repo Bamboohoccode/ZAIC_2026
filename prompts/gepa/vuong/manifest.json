@@ -150,8 +150,12 @@
   },
   "planner_v13": {
     "file": "planner_v13.txt (Pure Prompt)",
-    "type": "planner",
-    "notes": "GEPA Iteration 13: 1) Strict prohibition against hallucinating quantitative values on vague slots ('chút tiền', 'tiền cà phê' -> halt and ask, cấm tự bịa 500k, 5tr). 2) Compound Multi-Task Ambiguity Rule: execute clear tasks first, halt and ask at the tail for collision tasks (resolving train_0280, train_0397). 3) Explicit Anti-Hallucination List for optional parameters (cấm note trong transfer, cấm label/repeat trong alarm, cấm seat_class trong flights.book, {} cho tv.guide/calendar.list_events). 4) Compact 3-step CoT under 550 tokens to maintain ~20s latency."
+    "mean_score": 0.3094,
+    "act": 0.3221,
+    "ask": 0.1381,
+    "empty": 0.5000,
+    "avg_latency_s": 26.5,
+    "notes": "Full End-to-End Cloud GPU execution of Planner V13 on all 300 dev samples. WRONG_TOOL_OR_ARGS drops to 38 (12.7%) thanks to the Anti-Hallucination List, and Ask F1 rebounds strongly from 0.0849 to 0.1381 (+62.7% relative gain). 17 samples improved, including train_0182 (0.0 -> 1.0), train_0494 (0.0 -> 1.0), train_1542 (0.5 -> 1.0). However, Act F1 dropped from 0.3608 to 0.3221 due to the narrow enumeration '(người nhận, phòng, thiết bị, sự kiện)' which inadvertently caused false asks on package/order IDs (train_1365, train_1105)."
   },
   "mapper_v1": {
     "file": "mapper_v1.txt",

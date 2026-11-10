@@ -141,8 +141,12 @@
   },
   "planner_v12": {
     "file": "planner_v12.txt (Pure Prompt)",
-    "type": "planner",
-    "notes": "GEPA Iteration 12: Targeted fix for the 33 False Asks, 13 False Acts, and context overflows in V11. 1) Strict 'Read-First, Ask-Only-After-Reading' protocol to eliminate premature ask at Turn 1 before running search/list tools. 2) Hard Exit Guard for uninstalled apps and user cancellations to restore Empty F1. 3) Domain-specific ID provenance mapping (banking beneficiary_id from list_beneficiaries, not contacts.search). 4) Expanded context limit (--max-ctx 12288) to prevent mid-thought truncations."
+    "mean_score": 0.3357,
+    "act": 0.3608,
+    "ask": 0.0849,
+    "empty": 0.5455,
+    "avg_latency_s": 21.0,
+    "notes": "Full End-to-End Cloud GPU execution of Planner V12 on all 300 dev samples. BREAKS ALL HISTORICAL PROJECT RECORDS: Mean F1 reaches 0.3357 (+0.0183 vs V11, +0.0240 vs baseline), Act F1 reaches 0.3608 (all-time peak), and Empty F1 rebounds to 0.5455. False Asks dropped from 25 to 1 (0.3%), Extra Calls dropped to 3 (1.0%), and Average Latency dropped from 33.8s to 21.0s/sample (-37.9%). The --max-ctx 12288 completely resolved context truncations on large tool catalogs (train_0200, train_0272). Ask F1 remains bounded at 0.0849 due to vague non-ID slots (like 'chút tiền' lacking amount) and persistent contact collision auto-regressive bias."
   },
   "mapper_v1": {
     "file": "mapper_v1.txt",

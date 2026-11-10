@@ -148,6 +148,11 @@
     "avg_latency_s": 21.0,
     "notes": "Full End-to-End Cloud GPU execution of Planner V12 on all 300 dev samples. BREAKS ALL HISTORICAL PROJECT RECORDS: Mean F1 reaches 0.3357 (+0.0183 vs V11, +0.0240 vs baseline), Act F1 reaches 0.3608 (all-time peak), and Empty F1 rebounds to 0.5455. False Asks dropped from 25 to 1 (0.3%), Extra Calls dropped to 3 (1.0%), and Average Latency dropped from 33.8s to 21.0s/sample (-37.9%). The --max-ctx 12288 completely resolved context truncations on large tool catalogs (train_0200, train_0272). Ask F1 remains bounded at 0.0849 due to vague non-ID slots (like 'chút tiền' lacking amount) and persistent contact collision auto-regressive bias."
   },
+  "planner_v13": {
+    "file": "planner_v13.txt (Pure Prompt)",
+    "type": "planner",
+    "notes": "GEPA Iteration 13: 1) Strict prohibition against hallucinating quantitative values on vague slots ('chút tiền', 'tiền cà phê' -> halt and ask, cấm tự bịa 500k, 5tr). 2) Compound Multi-Task Ambiguity Rule: execute clear tasks first, halt and ask at the tail for collision tasks (resolving train_0280, train_0397). 3) Explicit Anti-Hallucination List for optional parameters (cấm note trong transfer, cấm label/repeat trong alarm, cấm seat_class trong flights.book, {} cho tv.guide/calendar.list_events). 4) Compact 3-step CoT under 550 tokens to maintain ~20s latency."
+  },
   "mapper_v1": {
     "file": "mapper_v1.txt",
     "type": "dialect_mapper",

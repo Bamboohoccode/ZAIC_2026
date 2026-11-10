@@ -139,6 +139,11 @@
     "avg_latency_s": 33.8,
     "notes": "Full End-to-End Cloud GPU execution of Planner V11 on all 300 dev samples. Sets NEW ALL-TIME PROJECT RECORDS: Mean F1 hits 0.3174 (surpassing even dev_v6_real 0.3167) and Act F1 hits 0.3397. Ask F1 more than DOUBLES from 0.0706 to 0.1444 (+104% relative gain), and Hash Mismatch drops to 142 (47.3%). Missing write calls on conditional ELSE branches dropped from 72 to 51 (-29.2%). Analysis reveals 33 False Asks where Ambiguity Gate fired prematurely before running available read tools."
   },
+  "planner_v12": {
+    "file": "planner_v12.txt (Pure Prompt)",
+    "type": "planner",
+    "notes": "GEPA Iteration 12: Targeted fix for the 33 False Asks, 13 False Acts, and context overflows in V11. 1) Strict 'Read-First, Ask-Only-After-Reading' protocol to eliminate premature ask at Turn 1 before running search/list tools. 2) Hard Exit Guard for uninstalled apps and user cancellations to restore Empty F1. 3) Domain-specific ID provenance mapping (banking beneficiary_id from list_beneficiaries, not contacts.search). 4) Expanded context limit (--max-ctx 12288) to prevent mid-thought truncations."
+  },
   "mapper_v1": {
     "file": "mapper_v1.txt",
     "type": "dialect_mapper",

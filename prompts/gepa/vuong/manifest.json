@@ -157,6 +157,11 @@
     "avg_latency_s": 26.5,
     "notes": "Full End-to-End Cloud GPU execution of Planner V13 on all 300 dev samples. WRONG_TOOL_OR_ARGS drops to 38 (12.7%) thanks to the Anti-Hallucination List, and Ask F1 rebounds strongly from 0.0849 to 0.1381 (+62.7% relative gain). 17 samples improved, including train_0182 (0.0 -> 1.0), train_0494 (0.0 -> 1.0), train_1542 (0.5 -> 1.0). However, Act F1 dropped from 0.3608 to 0.3221 due to the narrow enumeration '(người nhận, phòng, thiết bị, sự kiện)' which inadvertently caused false asks on package/order IDs (train_1365, train_1105)."
   },
+  "planner_v14": {
+    "file": "planner_v14.txt (Pure Prompt)",
+    "type": "planner",
+    "notes": "GEPA Iteration 14 (The Ultimate Fusion): Merges V12's record Act F1 foundation (0.3608) with V13's Anti-Hallucination List (WRONG_TOOL_OR_ARGS 12.7%) and Ask F1 strength (0.1381). 1) Restores universal ID definition (explicitly including tracking_id from package_tracking.track) to recover regressions like train_1365, train_1105. 2) Preserves strict prohibition against hallucinating amounts for vague values ('chút tiền', 'tiền cà phê'). 3) Preserves Anti-Hallucination List (no note in transfer, no label/repeat in alarm, no seat_class in flights). 4) Preserves compound multi-task ambiguity ordering."
+  },
   "mapper_v1": {
     "file": "mapper_v1.txt",
     "type": "dialect_mapper",

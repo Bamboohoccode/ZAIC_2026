@@ -145,28 +145,7 @@ ax.set_ylim(0, 0.74)
 ax.yaxis.grid(True, linestyle="--", alpha=0.5, color="#cbd5e1", zorder=1)
 ax.xaxis.grid(False)
 
-# Concise Legend: only meaningful milestones + cold timeline bar
-legend_elements = [
-    mpatches.Patch(facecolor="#334155", edgecolor="#0f172a", label="Baseline (Mốc tham chiếu gốc)"),
-    mpatches.Patch(facecolor=COLD_COLOR, edgecolor="#cbd5e1", alpha=0.7, label="Các bước trung gian V1-V15 (Cold slate: phản ánh tiến trình thời gian)"),
-    mpatches.Patch(facecolor="#e69f00", edgecolor="#0f172a", label="V4 [Early Peak] (Đỉnh cao Phase 1 - Mean: 0.3597)"),
-    mpatches.Patch(facecolor="#0284c7", edgecolor="#0f172a", label="V6 [Guarded Peak] (Đỉnh cao Ask có Guard - Ask: 0.3893)"),
-    mpatches.Patch(facecolor="#d55e00", edgecolor="#0f172a", label="V12 [Champion] (Quán quân Pure Prompt - Mean: 0.3357, Act: 0.3608)"),
-    mpatches.Patch(facecolor="#009e73", edgecolor="#0f172a", label="V15 [Co-Champ] (Đồng quán quân - Mean: 0.3353, Kỷ lục lệch hash 139)")
-]
 
-legend = ax.legend(
-    handles=legend_elements,
-    title="Các Mốc Tiến Hóa Trọng Yếu",
-    title_fontsize=11.5,
-    fontsize=10,
-    loc="upper right",
-    frameon=True,
-    framealpha=0.95,
-    edgecolor="#cbd5e1",
-    ncol=2
-)
-legend.get_title().set_fontweight("bold")
 
 # Strict user requirement: The note box "Ghi chu" ONLY keeps the explanation for the number above the bar
 info_text = "Ghi chú: Con số trên đầu mỗi cột gồm Điểm F1 tuyệt đối và (% Tăng/Giảm tương đối so với Baseline)."

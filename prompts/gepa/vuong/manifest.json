@@ -168,8 +168,12 @@
   },
   "planner_v15": {
     "file": "planner_v15.txt (Pure Prompt)",
-    "type": "planner",
-    "notes": "GEPA Iteration 15 (Precision Synthesis): 100% preservation of Champion V12's architecture (Act F1 0.3608, Empty F1 0.5455, Latency 21.0s) including the emphatic (RẤT QUAN TRỌNG) cancellation guard and contrastive ambiguity pair ('gọi cho Minh' vs 'gọi cho Lê Minh'). Surgically augments V12 with: 1) Strict prohibition against hallucinating values on vague non-lookup slots ('chút tiền', 'tiền cà phê' lacking amount); 2) Bulleted Anti-Hallucination list for optional parameters (cấm note, cấm label/repeat, cấm seat_class, {} cho list tools) to secure <= 12% WRONG_TOOL_OR_ARGS; 3) Explicit package tracking ID provenance (package_tracking.track). Target: Break 0.36 - 0.38+ Mean F1."
+    "mean_score": 0.3353,
+    "act": 0.3603,
+    "ask": 0.1087,
+    "empty": 0.5000,
+    "avg_latency_s": 37.0,
+    "notes": "Full End-to-End Cloud GPU execution of Planner V15 on all 300 dev samples. Statistically matches Champion V12 (Mean F1 0.3353 vs 0.3357, Act F1 0.3603 vs 0.3608) while setting an ALL-TIME PROJECT RECORD LOW for Hash Mismatch at 139 (46.3%). Ask F1 reaches 0.1087 (up from 0.0849 in V12). Extra calls remain minimal at 3 (1.0%). Pairwise analysis reveals immense complementarity: 23 samples improved in V15 vs V12 (including train_0391, train_1352, train_0444 0.0 -> 1.0). An ensemble between V12 and V15 reaches an Oracle Mean F1 of 0.3903."
   },
   "mapper_v1": {
     "file": "mapper_v1.txt",

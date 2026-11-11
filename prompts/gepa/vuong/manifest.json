@@ -166,6 +166,11 @@
     "avg_latency_s": 33.9,
     "notes": "Full End-to-End Cloud GPU execution of Planner V14 on all 300 dev samples. WRONG_TOOL_OR_ARGS hits new all-time low of 36 (12.0%) and Ask F1 holds strong at 0.1325. Extra Calls remain low at 4 (1.3%). However, Act F1 drops from 0.3608 to 0.3298 and Empty F1 drops to 0.4091 because removing the contrastive ambiguity example and shortening the cancellation guard weakened the model's ability to resist false actions on self-canceled queries (train_1097) and criteria-based bike selection (train_1511)."
   },
+  "planner_v15": {
+    "file": "planner_v15.txt (Pure Prompt)",
+    "type": "planner",
+    "notes": "GEPA Iteration 15 (Precision Synthesis): 100% preservation of Champion V12's architecture (Act F1 0.3608, Empty F1 0.5455, Latency 21.0s) including the emphatic (RẤT QUAN TRỌNG) cancellation guard and contrastive ambiguity pair ('gọi cho Minh' vs 'gọi cho Lê Minh'). Surgically augments V12 with: 1) Strict prohibition against hallucinating values on vague non-lookup slots ('chút tiền', 'tiền cà phê' lacking amount); 2) Bulleted Anti-Hallucination list for optional parameters (cấm note, cấm label/repeat, cấm seat_class, {} cho list tools) to secure <= 12% WRONG_TOOL_OR_ARGS; 3) Explicit package tracking ID provenance (package_tracking.track). Target: Break 0.36 - 0.38+ Mean F1."
+  },
   "mapper_v1": {
     "file": "mapper_v1.txt",
     "type": "dialect_mapper",

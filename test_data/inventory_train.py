@@ -4,7 +4,7 @@ import json, os, collections
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = os.path.join(HERE, "..", "data", "raw", "train+public_test", "train")
-OUT = os.path.join(HERE, "..", "data", "derived", "TRAIN_INVENTORY.md")
+OUT = os.path.join(HERE, "..", "data", "derived", "check_data.md")
 cat = json.load(open(os.path.join(BASE, "train_tools_catalog.json"), encoding="utf-8"))
 env_dir = os.path.join(BASE, "train_environment")
 ids = sorted(os.listdir(env_dir))

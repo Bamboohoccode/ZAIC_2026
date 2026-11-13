@@ -117,6 +117,42 @@ Nguồn: Huang et al. và Panickssery et al. (mục 7, 8 trong Nguồn). Hai bà
 
 ---
 
+## Phần D. Môi trường chạy
+
+### D0. Quyết định: sửa trọng số tại máy, chạy model trên Kaggle (bf16)
+Quyết định 07/11/2026 (người dùng quyết định). Thay cho quyết định "chạy toàn bộ trên máy cá nhân" ghi cùng ngày.
+
+Lý do không dùng lượng tử hoá (4-bit hoặc 8-bit):
+a) Sửa trọng số nhạy với độ chính xác. Lượng tử hoá có nguy cơ làm mất bản sửa, hoặc làm điểm đo lệch so với model bf16 mà BTC chấm. CHƯA XÁC MINH bằng phép thử, nhưng người dùng chọn tránh rủi ro này.
+b) Máy có GPU 6 GB, không chứa nổi Qwen3-4B ở bf16 (khoảng 8 GB) nếu không lượng tử hoá.
+
+Lý do không tốn phí API: Opus chạy trên máy qua Claude Code đăng nhập gói Pro, không gọi API. Nếu máy có biến môi trường `ANTHROPIC_API_KEY` thì Claude Code dùng key đó và bị tính phí API, cần xoá biến này. Opus tiêu hao hạn mức Pro nhanh.
+
+### D1. Luồng làm việc
+1. **Tại máy:** Opus sinh script sửa trọng số (`weights.py`), xuất ra delta (các trọng số bị đổi, không lưu cả model). Bước này chạy được trên CPU, đã kiểm trên máy.
+2. **Upload lên Kaggle** (dataset): script và delta.
+3. **Trên Kaggle:** notebook nạp Qwen3-4B bf16, áp bản sửa để tạo model đã chỉnh, chạy tập **dev**, ghi điểm ra `/kaggle/working`. Các bước cần chạy model (tìm hướng gây lỗi `directions.py`, đo `run_round.py`) đều chạy ở đây.
+4. **Tải kết quả về máy:** Opus đọc điểm, tạo bản sửa tiếp. Gom nhiều ứng viên sửa vào một lần chạy (nạp model một lần, áp từng delta trong bộ nhớ, đo, hoàn nguyên) để giảm số lần khởi động notebook.
+5. **Cuối cùng:** chạy tập test BTC một lần để so với baseline. Vòng lặp chỉ dùng dev, không đưa log lỗi test cho Opus.
+
+### D2. Lưu ý về Kaggle (con số gần đúng, cần đối chiếu trên trang Kaggle)
+- GPU: 1x P100 hoặc 2x T4 (16 GB mỗi card), RAM khoảng 30 GB, hạn mức khoảng 30 giờ GPU mỗi tuần, một phiên tối đa khoảng 9 đến 12 giờ, ổ ghi khoảng 20 GB.
+- Chạy kiểu batch (Save Version), vì phiên tương tác tính vào hạn mức kể cả khi không chạy gì.
+- **T4 và P100 không hỗ trợ bf16 gốc.** Trọng số vẫn lưu ở bf16, nhưng phép tính có thể phải chạy ở fp16 hoặc bf16 mô phỏng (chậm hơn). CHƯA XÁC MINH kết quả khớp với bf16 mà BTC chấm, cần so thử trên vài mẫu trước khi tin điểm đo.
+- ToolEnv của BTC phải cài được trên Kaggle (cần Internet hoặc upload như dataset).
+
+### D3. Phương án đã bỏ
+- Lượng tử hoá 4-bit hoặc 8-bit trên GPU 6 GB của máy: lý do ở D0. Có thể xét lại nếu có phép thử cho thấy bản sửa còn nguyên sau lượng tử hoá.
+- Chạy bf16 trên CPU hoặc chia GPU và CPU: đúng model nhưng rất chậm, chỉ hợp để kiểm cuối.
+
+### D4. Cần kiểm tra trước khi làm
+- Thể lệ có cho phép dùng Opus sửa trọng số và dùng Kaggle không.
+- Bản Qwen đang dùng (Qwen3-4B) khớp với bản thể lệ yêu cầu.
+- Thời gian nạp model và thời gian đo 50 mẫu dev trên Kaggle, để tính số ứng viên mỗi lần chạy.
+- Fp16 và bf16 trên Kaggle cho kết quả khớp (xem D2).
+
+---
+
 ## Rủi ro chính
 
 - **Rò rỉ test:** đã tránh nhờ thiết kế (tập test để riêng, dữ liệu tool call xử lý riêng). Chỉ cần giữ nguyên nguyên tắc này, không đưa log lỗi của test cho Opus.
@@ -140,3 +176,8 @@ Cơ sở cho thiết kế dữ liệu và đánh giá:
 7. Huang et al. *Large Language Models Cannot Self-Correct Reasoning Yet*, ICLR 2024. https://arxiv.org/abs/2310.01798
 8. Panickssery, Bowman, Feng. *LLM Evaluators Recognize and Favor Their Own Generations*, NeurIPS 2024. https://papers.nips.cc/paper_files/paper/2024/hash/7f1f0218e45f5414c79c0679633e47bc-Abstract-Conference.html
 9. Berkeley Function Calling Leaderboard v3 (tài liệu EvalScope). https://evalscope.readthedocs.io/en/latest/third_party/bfcl_v3.html
+
+
+Thông tin Kaggle (tổng hợp thứ cấp, cần đối chiếu trên trang chính thức của Kaggle):
+10. Tổng hợp GPU miễn phí. https://aimultiple.com/free-cloud-gpu
+11. Ghi chú về phiên batch và hạn mức tuần. https://www3.nd.edu/~dchiang/teaching/nlp/2023/kaggle.html

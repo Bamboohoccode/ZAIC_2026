@@ -1,7 +1,7 @@
 """Gọi thử mọi tool trong catalog của mỗi split bằng zaic_tools (không sửa mô phỏng).
 
 Với mỗi tool: tìm một mẫu có app của tool được cài, sinh tham số tối thiểu theo schema,
-rồi gọi qua ToolEnv. Ghi kết quả ra test/results_<split>.jsonl và in tổng hợp.
+rồi gọi qua ToolEnv. Ghi kết quả ra runs/call_all_tools/results_<split>.jsonl và in tổng hợp.
 Chạy: python test/call_all_tools.py
 """
 import json, os, sys, collections
@@ -85,11 +85,12 @@ def run_split(split):
             status, err = "exception", f"{type(e).__name__}: {e}"
         results.append({"tool": name, "kind": tool["kind"], "sample": pick["id"], "args": args, "status": status, "error": err,
                         "_line": {"id": pick["id"], "tool_calls": env.get_tool_calls(), "state_hash": env.get_state_hash()}})
-    out = os.path.join(HERE, f"results_{split}.jsonl")
+    OUTDIR = os.path.join(HERE, "..", "runs", "call_all_tools"); os.makedirs(OUTDIR, exist_ok=True)
+    out = os.path.join(OUTDIR, f"results_{split}.jsonl")
     with open(out, "w", encoding="utf-8") as f:
         for r in results: f.write(json.dumps({k: v for k, v in r.items() if k != "_line"}, ensure_ascii=False) + "\n")
     # file nộp theo README mục 4: id, tool_calls, state_hash (mỗi dòng là một lần thử tool)
-    sub = os.path.join(HERE, f"submission_{split}.jsonl")
+    sub = os.path.join(OUTDIR, f"submission_{split}.jsonl")
     with open(sub, "w", encoding="utf-8") as f:
         for r in results:
             line = r["_line"]

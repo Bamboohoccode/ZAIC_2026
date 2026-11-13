@@ -20,7 +20,7 @@ from pathlib import Path
 
 ASR_MODEL = "khanhld/chunkformer-ctc-large-vie"
 MAPPER_MODEL = "Qwen/Qwen3-0.6B"
-LLM_MODEL = "Qwen/Qwen3-4B-Instruct-2507"
+LLM_MODEL = "Ma7ee7/Qwen3.8_4B_Distilled"  # đổi 2026-11-09 từ Qwen/Qwen3-4B (người dùng chọn, xem DECISIONS)
 MAX_CTX = 16384
 MAX_NEW = 512
 MAX_STEPS = 8
@@ -209,13 +209,13 @@ def unseen_ids(call, catalog, msgs):
 
 
 class VLLM:
-    def __init__(self, name, lora, gpu_mem, seed, max_len, max_new, chat_kwargs=None, eager=False):
+    def __init__(self, name, lora, gpu_mem, seed, max_len, max_new, chat_kwargs=None, eager=False, dtype="auto"):
         from vllm import LLM, SamplingParams
-        kw, self.lora = {}, None
+        kw, self.lora = {"dtype": dtype}, None
         if lora:
             from vllm.lora.request import LoRARequest
             r = json.load(open(Path(lora) / "adapter_config.json"))["r"]
-            kw = {"enable_lora": True, "max_lora_rank": next(x for x in (8, 16, 32, 64, 128, 256, 512) if x >= r)}
+            kw.update({"enable_lora": True, "max_lora_rank": next(x for x in (8, 16, 32, 64, 128, 256, 512) if x >= r)})
             self.lora = LoRARequest("ft", 1, str(lora))
         self.llm = LLM(name, enable_prefix_caching=True, max_model_len=max_len, seed=seed,
                        gpu_memory_utilization=gpu_mem, enforce_eager=eager, **kw)
@@ -240,6 +240,43 @@ class VLLM:
         gc.collect()
         cleanup_dist_env_and_memory()
         torch.cuda.empty_cache()
+
+
+class HFLLM:
+    """transformers backend (no vLLM): runs on Windows and small GPUs, optional bitsandbytes 8bit/4bit.
+    Same interface as VLLM; greedy, one conversation at a time, no prefix cache (slower than vLLM)."""
+
+    def __init__(self, name, quant, seed, max_new, chat_kwargs=None):
+        import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+        torch.manual_seed(seed)
+        self.torch = torch
+        self.tok = AutoTokenizer.from_pretrained(name)
+        dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
+        q = None
+        if quant == "4bit":
+            q = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_compute_dtype=dtype)
+        elif quant == "8bit":
+            q = BitsAndBytesConfig(load_in_8bit=True)
+        self.model = AutoModelForCausalLM.from_pretrained(name, quantization_config=q, dtype=dtype,
+                                                          device_map="cuda:0" if q else "auto", low_cpu_mem_usage=True).eval()
+        self.max_new, self.kw = max_new, chat_kwargs or {}
+
+    def _text(self, msgs, tools):
+        return self.tok.apply_chat_template(msgs, tools=tools, add_generation_prompt=True, tokenize=False, **self.kw)
+
+    def n_tokens(self, msgs, tools):
+        return len(self.tok.encode(self._text(msgs, tools), add_special_tokens=False))
+
+    def chat(self, convs, tools=None):
+        outs = []
+        for msgs in convs:
+            enc = self.tok(self._text(msgs, tools), return_tensors="pt", add_special_tokens=False).to(self.model.device)
+            with self.torch.no_grad():
+                g = self.model.generate(**enc, max_new_tokens=self.max_new, do_sample=False, temperature=None, top_p=None,
+                                        top_k=None, pad_token_id=self.tok.eos_token_id)
+            outs.append(self.tok.decode(g[0, enc["input_ids"].shape[1]:], skip_special_tokens=True).strip())
+        return outs
 
 
 def _vllm_worker(conn, device, args):
@@ -439,12 +476,18 @@ def main():
     ap.add_argument("--mapper-device", help="GPU index for the mapper, run in its own process (default: share the LLM's GPU)")
     ap.add_argument("--llm", default=LLM_MODEL, help='HF id or local folder, "gold" = replay labels (train)')
     ap.add_argument("--llm-lora")
+    ap.add_argument("--llm-think", choices=["on", "off"], default="on",
+                    help='Qwen3 hybrid thinking for the planner; "off" passes enable_thinking=False (default on = old behaviour)')
+    ap.add_argument("--llm-dtype", default="auto", help='vLLM dtype for the planner; "half" on GPUs without bf16 (e.g. Kaggle T4)')
+    ap.add_argument("--backend", choices=["vllm", "hf"], default="vllm", help='planner engine; "hf" = transformers (Windows, small GPU)')
+    ap.add_argument("--hf-quant", choices=["none", "8bit", "4bit"], default="4bit", help="bitsandbytes quantization for --backend hf")
     ap.add_argument("--gpu-mem", type=float, default=0.7, help="main LLM gpu_memory_utilization")
     ap.add_argument("--mapper-gpu-mem", type=float, default=0.1, help="mapper gpu_memory_utilization")
     ap.add_argument("--eager", action="store_true", help="vLLM enforce_eager: skip CUDA graphs (slower, avoids capture errors)")
     ap.add_argument("--verify-rounds", type=int, default=VERIFY_ROUNDS)
     ap.add_argument("--text", action="store_true", help="use audio_text instead of ASR (train only)")
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--ids", help="text file, one sample id per line; run only these samples (e.g. eval/splits/dev_ids.txt)")
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args()
     gold = a.llm == "gold"
@@ -467,6 +510,9 @@ def main():
     catalog = {t["name"]: t for app in json.load(open(root / a.split / f"{a.split}_tools_catalog.json", encoding="utf-8"))["apps"]
                for t in app["tools"]}
     items = [json.loads(l) for l in open(root / a.split / f"{a.split}.jsonl", encoding="utf-8") if l.strip()]
+    if a.ids:
+        keep_ids = {l.strip() for l in open(a.ids, encoding="utf-8") if l.strip()}
+        items = [it for it in items if it["id"] in keep_ids]
     items = items[:a.limit] if a.limit else items
     t_start = time.time()
 
@@ -475,7 +521,13 @@ def main():
     itn = load_itn(a.itn, a.itn_device) if a.itn else None
     m_args = (a.mapper, a.mapper_lora, a.mapper_gpu_mem, a.seed, 2048, 256, {"enable_thinking": False}, a.eager)
     mapper = None if a.mapper == "none" or gold else RemoteVLLM(a.mapper_device, *m_args) if a.mapper_device else VLLM(*m_args)
-    llm = GoldLLM() if gold else VLLM(a.llm, a.llm_lora, a.gpu_mem, a.seed, MAX_CTX, MAX_NEW, None, a.eager)
+    think_kw = None if a.llm_think == "on" else {"enable_thinking": False}
+    if gold:
+        llm = GoldLLM()
+    elif a.backend == "hf":
+        llm = HFLLM(a.llm, a.hf_quant, a.seed, MAX_NEW, think_kw)
+    else:
+        llm = VLLM(a.llm, a.llm_lora, a.gpu_mem, a.seed, MAX_CTX, MAX_NEW, think_kw, a.eager, a.llm_dtype)
     slow = []
     with open(a.out, "w", encoding="utf-8") as fout, open(a.out + ".trace.jsonl", "w", encoding="utf-8") as ftr:
         for i, item in enumerate(items):

@@ -164,7 +164,6 @@ zaic2026-lifemate/
 ├── docs/
 │   ├── PROJECT_OVERVIEW.md      # file này
 │   ├── PIPELINE.md              # plan cũ
-│   ├── PIPELINE_PROPOSAL.md     # luận cứ cho plan mới
 │   ├── RULES.md                 # luật đã đối chiếu, mục "chưa xác nhận"
 │   └── DECISIONS.md             # nhật ký quyết định + kết quả ablation
 ├── configs/

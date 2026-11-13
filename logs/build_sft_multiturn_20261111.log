@@ -1,0 +1,8 @@
+train.jsonl: 1545 dòng (kỳ vọng 1545)
+dev_ids: 300
+loại vì trùng audio_text với dev: []
+loại vì trùng audio_text trong nội bộ train (giữ mẫu đầu): ['train_0066']
+tokenizer: D:\Everyhing_tosave\Everyhing_tosave\Zalo_Ai_Challenge\models\Qwen3.8-4B-Distilled
+ghi sft_multiturn_train_20261111.jsonl: 1244 dòng, sha256 ec768c0a3e35766f21c935c115b181cc2e1683233b718ff3b46ef0841bbdf5a5
+ghi sft_multiturn_dev_20261111.jsonl: 300 dòng, sha256 1b6cc22d5f142a8b1fa3529b4252cb50a9f1ec673779dd9708149ac6202cc0ef
+xong trong 31.9 giây

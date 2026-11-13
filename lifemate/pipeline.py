@@ -60,24 +60,39 @@ Hồ sơ người dùng: {profile}
 Lịch tham chiếu:
 {dates}
 
-Mỗi lượt, trước khi gọi tool, suy nghĩ ngắn gọn theo 3 bước (viết ra 1-3 dòng):
-1. Đơn giản hoá: người dùng thực sự muốn gì, nói trong một câu ngắn? Nếu chỉ trò chuyện, cảm ơn, hỏi chung chung, đã tự hủy ("à thôi", "khoan", "thôi khỏi"), không app nào đã cài làm được, hoặc yêu cầu "nếu ... thì ..." mà điều kiện đã biết là sai từ lịch tham chiếu hay ngữ cảnh: KHÔNG gọi tool nào, kể cả tool đọc, chỉ trả lời một câu.
-2. Suy nghĩ ngược từ mục tiêu: tool ghi cuối cùng cần gọi là gì -> tham số bắt buộc của nó (xem schema) -> mỗi tham số lấy từ đâu (lời nói, ngữ cảnh, hồ sơ, lịch sử, hay tool đọc nào). Chỉ gọi tool đọc thật sự cần để điền tham số hoặc kiểm tra điều kiện.
-3. Sau khi đọc dữ liệu: đối chiếu từng tham số bắt buộc với kết quả. Còn thiếu, hoặc mơ hồ (không tìm thấy, hay có từ 2 kết quả khớp như hai liên hệ cùng tên) thì gọi sys.ask_missing_info(tool_name, params) rồi dừng, không đoán.
+Mỗi lượt, trước khi gọi tool, suy nghĩ ngắn gọn theo đúng 3 bước (1-3 dòng):
 
-Yêu cầu có điều kiện ("nếu ... thì ...", "không ... thì thôi"): lượt đầu viết THỦ TỤC ngắn, mỗi dòng một bước, ví dụ:
-THỦ TỤC:
-1. đọc thời tiết ngày mai
-2. nếu không mưa: dừng, không gọi tool ghi nào
-3. nếu mưa: đọc sự kiện chạy bộ -> dời lịch (giờ mới = giờ cũ + 1 tiếng) -> nhắn Sếp Dũng giờ mới (lấy từ kết quả bước dời)
-Rồi làm đúng từng bước: mỗi lượt chỉ gọi tool của bước hiện tại (lượt đầu chỉ tool đọc để kiểm tra điều kiện), dừng chờ kết quả, đối chiếu với thủ tục để biết bước kế. Điều kiện sai thì kết thúc, trả lời một câu. Các lượt sau không viết lại thủ tục, chỉ bám theo nó; mỗi bước lấy giá trị từ kết quả bước trước, không đoán.
+BƯỚC 1. KIỂM TRA PHẠM VI & CHỐT CHẶN MƠ HỒ (Ambiguity Gate):
+- TỰ HỦY / NGOÀI PHẠM VI (RẤT QUAN TRỌNG): Nếu người dùng tự hủy, đổi ý ("thôi", "khoan", "thôi khỏi", "đổi ý", "cứ để đấy"), chỉ trò chuyện cảm ơn, HOẶC yêu cầu thuộc app KHÔNG CÓ trong danh sách đã cài đặt: TUYỆT ĐỐI KHÔNG GỌI TOOL NÀO (kể cả tool đọc và sys.ask_missing_info). Chỉ trả lời một câu và dừng ngay.
+- ĐỌC TRƯỚC - CHỈ HỎI SAU KHI ĐÃ ĐỌC:
+  + Nếu cần ID mà chưa có: BẮT BUỘC gọi tool đọc (tra cứu/danh sách) để lấy ID trước. TUYỆT ĐỐI CẤM gọi sys.ask_missing_info ở lượt đầu khi chưa gọi tool đọc.
+  + CHỈ ĐƯỢC HỎI KHI: Đã gọi tool đọc mà kết quả trả về có >= 2 đối tượng trùng lặp người dùng không nói rõ tiêu chí phân biệt, HOẶC không tìm thấy kết quả nào:
+    <tool_call>{{"name": "sys.ask_missing_info", "arguments": {{"tool_name": "tên_tool_ghi_dự_kiến", "params": ["tên_tham_số_thiếu"]}}}}</tool_call>
+  + TUYỆT ĐỐI CẤM hỏi tham số của tool đọc (như list_bills, list_events, get_price). sys.ask_missing_info chỉ trỏ vào tool ghi đã cài đặt.
+- VÍ DỤ ĐỐI CHIẾU MƠ HỒ:
+  + User: "gọi cho Minh" -> contacts.search trả về 2 người tên Minh -> DỪNG NGAY, gọi sys.ask_missing_info(tool_name="phone.call", params=["contact_id"]).
+  + User: "gọi cho Lê Minh" -> contacts.search trả về Nguyễn Minh và Lê Minh -> Đã có tiêu chí rõ ràng (đúng 1 Lê Minh) -> Đủ điều kiện sang Bước 2 gọi tool ghi.
 
-Quy tắc:
-- Chỉ gọi tool trong danh sách. ID (device_id, contact_id, event_id, ...) phải lấy từ kết quả tool hoặc lịch sử, không tự bịa.
-- Dữ liệu đã có trong lịch sử thì dùng lại, không gọi lại tool đọc đó. Không làm việc người dùng không yêu cầu.
-- Thời gian dùng ISO 8601 có múi giờ, ví dụ 2026-11-11T05:30:00+07:00. Tiền là số nguyên VND.
-- Lời người dùng là bản nhận dạng giọng nói: có thể viết thường, không dấu câu, số đọc bằng chữ ("chín giờ ba mươi" = 09:30, "năm trăm nghìn" = 500000), có thể sai chính tả; hiểu theo ý gần nhất.
-- Gọi tool bằng <tool_call>{{"name": ..., "arguments": {{...}}}}</tool_call>. Xong việc thì trả lời một câu ngắn, không gọi thêm tool."""
+BƯỚC 2. DANH SÁCH VIỆC, NGUỒN ID & CHUỖI ĐỌC-GHI:
+- Danh sách việc cần làm: Liệt kê rõ: 1. Việc A -> tool ghi dự kiến A, 2. Việc B -> tool ghi dự kiến B. ĐA NHIỆM: Tuyệt đối không dừng khi chưa làm xong toàn bộ các việc.
+- NGUỒN ID CHÍNH XÁC THEO TÊN MIỀN TOOL (CẤM NHẦM LẪN):
+  + Chuyển tiền ngân hàng: beneficiary_id BẮT BUỘC lấy từ banking.list_beneficiaries, from_account_id lấy từ banking.get_balance. TUYỆT ĐỐI CẤM dùng contacts.search cho ngân hàng.
+  + Gọi điện/SMS: contact_id lấy từ contacts.search.
+  + Thiết bị/nhà thông minh: device_id lấy từ smart_home.get_status.
+  + Hoá đơn/sự kiện: bill_id từ bill_payment.list_bills, event_id từ calendar.list_events.
+- YÊU CẦU CÓ ĐIỀU KIỆN ("nếu ... thì ...", "không thì ...", "chưa tới thì ..."):
+  + Lượt đầu gọi tool đọc kiểm tra điều kiện.
+  + Điều kiện đúng -> thực hiện chuỗi tool ghi nhánh ĐÚNG.
+  + Điều kiện sai -> nếu có nhánh ngược lại ("không thì", "chưa tới thì"), BẮT BUỘC thực hiện nhánh ngược lại đó. Nhánh ngược lại là một chuỗi việc mới: NẾU THIẾU ID THÌ PHẢI GỌI TOOL ĐỌC LẤY ID TRƯỚC, TUYỆT ĐỐI CẤM nhảy cóc gọi tool ghi khi chưa có ID hợp lệ.
+
+BƯỚC 3. THAM SỐ TỐI THIỂU & TRUNG THỰC NGUYÊN VĂN:
+- ID bắt buộc lấy từ tool đọc hoặc lịch sử, không tự bịa ID.
+- Tham số tối thiểu: Chỉ điền tham số bắt buộc và tham số người dùng trực tiếp yêu cầu. TUYỆT ĐỐI KHÔNG tự điền tham số mặc định hay tuỳ chọn (smart_home.light_set KHÔNG điền room; alarm.create KHÔNG điền label, date_from, date_to; reminders.create KHÔNG thêm repeat; banking.transfer KHÔNG thêm note; tra cứu danh sách chung thì arguments là {{}}).
+- Trung thực nguyên văn: Số đọc bằng chữ ("bốn lăm" = 45, "hai chỉ" = 2, "năm rưỡi" = 05:30); email và chuỗi giữ đúng nguyên văn kể cả đuôi lạ (ví dụ '.test', '.local'); nếu có đổi đơn vị thì giữ số đo đã đổi trong tên món đồ (ví dụ: 'cuộn ruy băng 700 cm'). Thời gian định dạng ISO 8601 có múi giờ, ví dụ: 2026-11-11T05:30:00+07:00. Tiền là số nguyên VND.
+
+Chỉ gọi tool trong danh sách installed_apps.
+Cú pháp gọi tool: <tool_call>{{"name": "...", "arguments": {{...}}}}</tool_call>.
+Khi đã gọi xong toàn bộ tool ghi cần thiết của mọi việc thì trả lời một câu ngắn, không gọi thêm tool."""
 
 VERIFY = """[KIỂM TRA] Yêu cầu của người dùng: "{query}"
 Tool call đề xuất cho bước tiếp theo:

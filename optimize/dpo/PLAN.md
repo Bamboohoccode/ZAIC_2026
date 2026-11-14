@@ -42,7 +42,7 @@ Sử dụng bộ dữ liệu đã được sinh và kiểm chứng `gold_hash_ve
 
 **Lệnh huấn luyện Giai đoạn 1:**
 ```bash
-# Trên A100 / H100 (bf16 LoRA thuần, không cần 4-bit)
+# Trên G4 96GB / A100 (bf16 LoRA thuần, không cần 4-bit)
 python -m lifemate.planner.train_dpo \
   --model Ma7ee7/Qwen3.8_4B_Distilled \
   --train-data optimize/dpo/dataset/dpo_train.jsonl \
@@ -50,7 +50,7 @@ python -m lifemate.planner.train_dpo \
   --out-dir checkpoints/planner_dpo_qwen38_lora \
   --epochs 2.0 --lr 5e-6 --beta 0.1 --rank 16 \
   --max-prompt-length 9216 --max-length 10240 \
-  --precompute-ref-log-probs --bs 1 --grad-accum 16
+  --precompute-ref-log-probs --bs 2 --grad-accum 8  # dùng --bs 1 --grad-accum 16 nếu là A100 40GB
 
 # Trên L4 22.5GB (bắt buộc bật QLoRA 4-bit)
 python -m lifemate.planner.train_dpo \
@@ -101,18 +101,19 @@ python eval/scorer.py --sub runs/test_qwen38_base.jsonl --compare runs/test_qwen
 
 ---
 
-## 4. Hướng Dẫn Chọn GPU Trên Google Colab (`A100` vs `H100` vs `L4` vs `T4`)
+## 4. Hướng Dẫn Chọn Phần Cứng Trên Google Colab (`G4` vs `L4` vs `T4` vs `A100` vs `TPU v5e-1 / v6e-1`)
 
 Vì prompt chứa danh sách JSON Schema các tool dài **5.9K–8.5K tokens** (tối đa ~9.4K tokens), DPO cần tính log-prob cho cả `chosen` và `rejected` trên chuỗi lên tới `9,216–10,240` tokens:
 
-| GPU Colab | VRAM | Hỗ trợ `bf16` & FlashAttn-2 | Cấu hình DPO khuyến nghị | Thời gian ước tính (1–2 epochs + Eval) | Khuyến nghị |
-|---|---:|:---:|---|---|---|
-| **NVIDIA A100** | **40 GB** (hoặc 80 GB) | Có (Ampere SM80) | `bf16` LoRA thuần (không cần 4-bit), `--precompute-ref-log-probs --bs 1 --grad-accum 16` | **~45–60 phút** (Train + Eval vLLM) | **Khuyên dùng #1** (Tối ưu nhất giữa tốc độ, VRAM và chi phí Compute Units) |
-| **NVIDIA H100** | **80 GB** | Có (Hopper SM90) | `bf16` LoRA thuần, `--bs 2 --grad-accum 8` | **~25–35 phút** | Nhanh nhất nếu gói Colab của bạn còn dư nhiều Compute Units |
-| **NVIDIA L4** | **22.5 GB** | Có (Ada SM89) | Bắt buộc `--load-in-4bit --precompute-ref-log-probs --bs 1 --grad-accum 16` | **~2.5–3.5 giờ** | Phương án tiết kiệm ổn định nếu không xin được A100 |
-| **NVIDIA T4** | **15–16 GB** | **Không** (Turing SM75, chỉ fp16) | Rất dễ OOM / cực chậm trên context > 6K khi train DPO | Quá chậm / Dễ OOM | **KHÔNG dùng T4 để train DPO** (chỉ dùng T4 để chạy inference vLLM nếu cần) |
+| Runtime Colab | Bộ nhớ / Kiến trúc | Hỗ trợ `bf16` & CUDA/vLLM | Cấu hình DPO khuyến nghị | Thời gian ước tính (Train + Eval) | Khuyến nghị |
+|---|---|---:|---|---|---|
+| **G4 (`RTX PRO 6000` Blackwell)** | **96 GB GDDR7** | Có (Blackwell, native `bf16`) | `bf16` LoRA thuần (tắt 4-bit), `--precompute-ref-log-probs --bs 2 --grad-accum 8` | **~25–40 phút** | **Khuyên dùng #1 (khi A100 hết slot)** — Dư VRAM, chạy cực nhanh cả DPO lẫn vLLM |
+| **L4** | **22.5 GB VRAM** | Có (Ada SM89, native `bf16`) | Bắt buộc `--load-in-4bit --precompute-ref-log-probs --bs 1 --grad-accum 16` | **~2.5–3.5 giờ** | **Lựa chọn #2 (Tiết kiệm Compute Units)** — Ổn định, đủ chạy hết pipeline |
+| **A100** | **40 GB / 80 GB VRAM** | Có (Ampere SM80) | `bf16` LoRA thuần, `--bs 1 --grad-accum 16` | **~45–60 phút** | Rất tốt nhưng hiện Colab đang hết suất (nếu trống lại vẫn dùng tốt) |
+| **T4** | **15–16 GB VRAM** | **Không** (Turing SM75, chỉ `fp16`) | Dễ OOM / quá chậm khi train DPO trên context 6K–9K tokens | > 6 giờ / dễ OOM | **KHÔNG dùng T4 để train DPO** (chỉ dùng cho inference vLLM nếu cần) |
+| **TPU (`v5e-1` / `v6e-1`)** | **16–32 GB HBM** (XLA) | **Không** (không có CUDA / vLLM / `bitsandbytes`) | Phải viết lại toàn bộ trainer sang `torch_xla` + biên dịch XLA lại theo độ dài prompt biến thiên | Không tương thích | **KHÔNG dùng TPU** — Stack hiện tại (`trl`/`peft`/`vllm`) chỉ chạy trên NVIDIA CUDA GPU |
 
-> **Mẹo triển khai thực tế:** Mở `notebooks/colab_train_dpo_qwen38_4b.ipynb`, notebook sẽ tự kiểm tra tên GPU và tự điền sẵn cờ `--load-in-4bit`, `--bs`, `--grad-accum`, `--precompute-ref-log-probs` phù hợp.
+> **Mẹo triển khai thực tế:** Mở `notebooks/colab_train_dpo_qwen38_4b.ipynb`, notebook tự nhận diện G4 / A100 / L4 / T4 (và báo lỗi rõ nếu chọn nhầm TPU) để tự điền sẵn cờ `--load-in-4bit`, `--bs`, `--grad-accum`, `--precompute-ref-log-probs` phù hợp.
 
 ---
 

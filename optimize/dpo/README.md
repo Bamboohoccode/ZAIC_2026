@@ -1,5 +1,8 @@
 # DPO Tool Knowledge Dataset & Fine-Tuning (`optimize/dpo/`)
 
+> **Kế hoạch triển khai đầy đủ 2 giai đoạn + hướng dẫn chọn GPU Colab:** xem [PLAN.md](PLAN.md).
+> **Notebook Colab chạy ngay cho Qwen 3.8 4B (`Ma7ee7/Qwen3.8_4B_Distilled`):** [notebooks/colab_train_dpo_qwen38_4b.ipynb](../../notebooks/colab_train_dpo_qwen38_4b.ipynb).
+
 Bộ dữ liệu preference pairs `(chosen, rejected)` cho bài toán **Task 2: DPO — Cải thiện Tool Knowledge giúp Qwen 4B phân biệt tool đúng/sai, tham số bắt buộc/tuỳ chọn và cổng chốt chặn mơ hồ** mà **không làm phình prompt/schema** (giữ nguyên Champion V15 prompt trong `lifemate/pipeline.py`).
 
 ## 1. Cấu trúc tệp
@@ -20,18 +23,23 @@ Bộ dữ liệu preference pairs `(chosen, rejected)` cho bài toán **Task 2: 
 - **Test (`eval/splits/test_ids.txt`)**: 100 mẫu (**3 app lạ**: `library`, `home_energy`, `medication`, cộng mẫu stratified đạt đúng tỉ lệ 79% act / 14% ask / 7% empty).
 - **Train DPO (`eval/splits/dpo_train_ids.txt`)**: 1,145 mẫu (34 app còn lại).
 
-## 4. Lệnh chạy cho đồng đội
-1. Kiểm tra dữ liệu cục bộ (không cần GPU hay model):
+## 4. Lệnh chạy cho đồng đội (mặc định `Ma7ee7/Qwen3.8_4B_Distilled`)
+1. Kiểm tra dữ liệu cục bộ (không cần GPU hay weight):
    ```bash
    python -m lifemate.planner.train_dpo --dry-run
    ```
-2. Chạy DPO fine-tuning (điền phiên bản Qwen vào `--model` hoặc biến môi trường `QWEN_MODEL_PATH`):
+2. Chạy DPO fine-tuning Giai đoạn 1 (dữ liệu programmatic):
    ```bash
-   python -m lifemate.planner.train_dpo --model <TEN_HOAC_DUONG_DAN_QWEN> --load-in-4bit
+   python -m lifemate.planner.train_dpo --model Ma7ee7/Qwen3.8_4B_Distilled --precompute-ref-log-probs
    ```
-3. Chạy inference & chấm điểm theo từng app (trước vs sau):
+3. (Nếu Giai đoạn 1 chưa đạt kỳ vọng) Lấy mẫu On-Policy trực tiếp từ Qwen 3.8 4B trên Colab & train Giai đoạn 2:
    ```bash
-   python -m lifemate.pipeline --root data --split train --ids eval/splits/dev_ids.txt \
-       --llm <TEN_HOAC_DUONG_DAN_QWEN> --llm-lora checkpoints/planner_dpo_lora --mapper none --text --verify-rounds 0 --out runs/dev_dpo.jsonl
-   python eval/scorer.py --sub runs/dev_baseline.jsonl --compare runs/dev_dpo.jsonl --dev-ids eval/splits/dev_ids.txt --by-app
+   python scripts/sample_onpolicy_dpo.py --root data --split train --ids eval/splits/dpo_train_ids.txt --model Ma7ee7/Qwen3.8_4B_Distilled --resume
+   python -m lifemate.planner.train_dpo --model Ma7ee7/Qwen3.8_4B_Distilled --train-data optimize/dpo/dataset/dpo_onpolicy_train.jsonl --resume-from-lora checkpoints/planner_dpo_qwen38_lora --lr 2e-6 --epochs 1.0 --out-dir checkpoints/planner_dpo_qwen38_s2_lora
+   ```
+4. Chạy inference & chấm điểm theo từng app (Trước vs Sau trên Val 300 & Test 100):
+   ```bash
+   python -m lifemate.planner.runner --root data --split train --ids eval/splits/dev_ids.txt --prompt prompts/gepa/vuong/planner_v15.txt \
+       --llm Ma7ee7/Qwen3.8_4B_Distilled --llm-lora checkpoints/planner_dpo_qwen38_lora --mapper none --text --verify-rounds 0 --out runs/dev_qwen38_dpo_s1.jsonl
+   python eval/scorer.py --sub runs/dev_qwen38_base.jsonl --compare runs/dev_qwen38_dpo_s1.jsonl --dev-ids eval/splits/dev_ids.txt --by-app
    ```

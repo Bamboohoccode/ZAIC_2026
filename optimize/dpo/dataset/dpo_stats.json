@@ -1,0 +1,70 @@
+{
+  "source_dpo_ids": 1145,
+  "deduped_samples": 1144,
+  "skipped_internal_duplicates": [
+    "train_0066"
+  ],
+  "train_samples": 1087,
+  "val_samples": 57,
+  "gold_hash_verified": 1144,
+  "gold_hash_failed": 0,
+  "by_split": {
+    "train": 4798,
+    "val": 248
+  },
+  "by_intent": {
+    "act": 4191,
+    "no_app": 106,
+    "empty": 82,
+    "ask": 667
+  },
+  "by_negative_class": {
+    "hallucinated_optional_args": 724,
+    "confusable_tool": 1097,
+    "premature_write_or_ask": 372,
+    "ambiguity_gate_error": 1712,
+    "multi_action_or_scope_error": 1141
+  },
+  "by_app": {
+    "weather": 354,
+    "calendar": 750,
+    "contacts": 1354,
+    "sms": 714,
+    "bill_payment": 670,
+    "ewallet": 560,
+    "smart_home": 612,
+    "ride_hailing": 232,
+    "alarm": 451,
+    "reminders": 433,
+    "banking": 265,
+    "phone": 323,
+    "none": 82,
+    "chat_ott": 582,
+    "food_delivery": 197,
+    "email": 193,
+    "video_meeting": 148,
+    "news": 139,
+    "maps": 113,
+    "learning": 137,
+    "subscriptions": 137,
+    "home_security": 188,
+    "door_lock": 208,
+    "appliances": 144,
+    "household_chores": 128,
+    "tasks": 176,
+    "robot_vacuum": 135,
+    "music": 105,
+    "podcast_radio": 101,
+    "notes": 142,
+    "home_automation": 161,
+    "flights": 82,
+    "shopping_list": 64,
+    "loyalty": 93
+  },
+  "file_sizes_mb": {
+    "tool_specs_catalog.json": 0.082,
+    "dpo_train.jsonl": 49.672,
+    "dpo_val.jsonl": 2.53
+  },
+  "total_pairs": 5046
+}

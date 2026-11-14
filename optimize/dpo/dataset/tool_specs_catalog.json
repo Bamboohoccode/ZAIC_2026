@@ -1,0 +1,3458 @@
+{
+ "smart_home.get_status": {
+  "type": "function",
+  "function": {
+   "name": "smart_home.get_status",
+   "description": "[read] Lấy thiết bị và trạng thái; lọc theo phòng/tầng/loại; không lọc thì trả về cả danh sách ngữ cảnh (scenes) đã lưu Trả về: devices[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "room": {
+      "type": "string"
+     },
+     "floor": {
+      "type": "integer",
+      "description": "Số nguyên, không dấu chấm hay phẩy, ví dụ 2"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "light",
+       "fan",
+       "climate",
+       "curtain",
+       "plug",
+       "tv"
+      ]
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "smart_home.light_set": {
+  "type": "function",
+  "function": {
+   "name": "smart_home.light_set",
+   "description": "[write] Bật/tắt/chỉnh sáng đèn",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "device_id": {
+      "type": "string",
+      "description": "ID thiết bị, lấy từ smart_home.get_status",
+      "x-ref": "smart_home.devices"
+     },
+     "power": {
+      "type": "string",
+      "enum": [
+       "on",
+       "off"
+      ]
+     },
+     "brightness": {
+      "type": "integer",
+      "description": "Số nguyên, không dấu chấm hay phẩy, ví dụ 2"
+     },
+     "color": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "device_id"
+    ]
+   }
+  }
+ },
+ "smart_home.fan_set": {
+  "type": "function",
+  "function": {
+   "name": "smart_home.fan_set",
+   "description": "[write] Bật/tắt/chỉnh tốc độ quạt",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "device_id": {
+      "type": "string",
+      "description": "ID thiết bị, lấy từ smart_home.get_status",
+      "x-ref": "smart_home.devices"
+     },
+     "power": {
+      "type": "string",
+      "enum": [
+       "on",
+       "off"
+      ]
+     },
+     "speed": {
+      "type": "integer",
+      "description": "Số nguyên, không dấu chấm hay phẩy, ví dụ 2"
+     }
+    },
+    "required": [
+     "device_id"
+    ]
+   }
+  }
+ },
+ "smart_home.climate_set": {
+  "type": "function",
+  "function": {
+   "name": "smart_home.climate_set",
+   "description": "[write] Đặt chế độ/nhiệt độ điều hoà",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "device_id": {
+      "type": "string",
+      "description": "ID thiết bị, lấy từ smart_home.get_status",
+      "x-ref": "smart_home.devices"
+     },
+     "mode": {
+      "type": "string",
+      "enum": [
+       "cool",
+       "heat",
+       "dry",
+       "fan",
+       "off"
+      ]
+     },
+     "temperature": {
+      "type": "integer",
+      "description": "Số nguyên, không dấu chấm hay phẩy, ví dụ 2"
+     }
+    },
+    "required": [
+     "device_id",
+     "mode"
+    ]
+   }
+  }
+ },
+ "smart_home.switch_set": {
+  "type": "function",
+  "function": {
+   "name": "smart_home.switch_set",
+   "description": "[write] Bật/tắt ổ cắm, rèm, TV thông minh",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "device_id": {
+      "type": "string",
+      "description": "ID thiết bị, lấy từ smart_home.get_status",
+      "x-ref": "smart_home.devices"
+     },
+     "power": {
+      "type": "string",
+      "enum": [
+       "on",
+       "off"
+      ]
+     }
+    },
+    "required": [
+     "device_id",
+     "power"
+    ]
+   }
+  }
+ },
+ "smart_home.scene_run": {
+  "type": "function",
+  "function": {
+   "name": "smart_home.scene_run",
+   "description": "[write] Chạy ngữ cảnh đã đặt sẵn (đi ngủ, ra khỏi nhà...)",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "scene_id": {
+      "type": "string",
+      "description": "ID ngữ cảnh, lấy từ smart_home.get_status (không lọc)",
+      "x-ref": "smart_home.scenes"
+     }
+    },
+    "required": [
+     "scene_id"
+    ]
+   }
+  }
+ },
+ "home_security.list_alerts": {
+  "type": "function",
+  "function": {
+   "name": "home_security.list_alerts",
+   "description": "[read] Xem cảnh báo gần đây Trả về: alerts[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "since": {
+      "type": "string",
+      "description": "Chỉ lấy cảnh báo từ thời điểm này, ISO-8601 đầy đủ giây và offset múi giờ, ví dụ 2026-11-11T05:30:00+07:00",
+      "format": "date-time"
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "home_security.get_camera": {
+  "type": "function",
+  "function": {
+   "name": "home_security.get_camera",
+   "description": "[read] Xem trạng thái camera theo vị trí Trả về: cameras[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "location": {
+      "type": "string",
+      "x-match": "fuzzy"
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "home_security.arm": {
+  "type": "function",
+  "function": {
+   "name": "home_security.arm",
+   "description": "[write] Bật/tắt chế độ bảo vệ",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "mode": {
+      "type": "string",
+      "enum": [
+       "away",
+       "home",
+       "off"
+      ]
+     }
+    },
+    "required": [
+     "mode"
+    ]
+   }
+  }
+ },
+ "home_security.acknowledge_alert": {
+  "type": "function",
+  "function": {
+   "name": "home_security.acknowledge_alert",
+   "description": "[write] Đánh dấu đã xem cảnh báo",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "alert_id": {
+      "type": "string",
+      "description": "ID cảnh báo, lấy từ home_security.list_alerts",
+      "x-ref": "home_security.alerts"
+     }
+    },
+    "required": [
+     "alert_id"
+    ]
+   }
+  }
+ },
+ "door_lock.list_locks": {
+  "type": "function",
+  "function": {
+   "name": "door_lock.list_locks",
+   "description": "[read] Danh sách khoá và trạng thái Trả về: locks[]",
+   "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   }
+  }
+ },
+ "door_lock.set_lock": {
+  "type": "function",
+  "function": {
+   "name": "door_lock.set_lock",
+   "description": "[write] Khoá/mở khoá",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "lock_id": {
+      "type": "string",
+      "description": "ID khoá, lấy từ door_lock.list_locks",
+      "x-ref": "door_lock.locks"
+     },
+     "locked": {
+      "type": "boolean",
+      "description": "true để khoá, false để mở khoá"
+     }
+    },
+    "required": [
+     "lock_id",
+     "locked"
+    ]
+   }
+  }
+ },
+ "door_lock.grant_guest_code": {
+  "type": "function",
+  "function": {
+   "name": "door_lock.grant_guest_code",
+   "description": "[write] Tạo mã mở cửa tạm cho khách Trả về: guest_code",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "lock_id": {
+      "type": "string",
+      "description": "ID khoá, lấy từ door_lock.list_locks",
+      "x-ref": "door_lock.locks"
+     },
+     "valid_until": {
+      "type": "string",
+      "description": "Mã hết hạn lúc, ISO-8601 đầy đủ giây và offset múi giờ, ví dụ 2026-11-11T05:30:00+07:00",
+      "format": "date-time"
+     },
+     "label": {
+      "type": "string",
+      "x-match": "fuzzy"
+     }
+    },
+    "required": [
+     "lock_id",
+     "valid_until"
+    ]
+   }
+  }
+ },
+ "robot_vacuum.get_status": {
+  "type": "function",
+  "function": {
+   "name": "robot_vacuum.get_status",
+   "description": "[read] Pin, trạng thái, khu vực Trả về: battery, status, mode, rooms[], current_job",
+   "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   }
+  }
+ },
+ "robot_vacuum.start": {
+  "type": "function",
+  "function": {
+   "name": "robot_vacuum.start",
+   "description": "[write] Bắt đầu dọn (toàn bộ nhà khi không truyền rooms, hoặc theo phòng)",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "rooms": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "Tên phòng, lấy từ rooms của robot_vacuum.get_status, ví dụ [\"phòng khách\", \"bếp\"]; bỏ trống để dọn cả nhà"
+     },
+     "mode": {
+      "type": "string",
+      "enum": [
+       "vacuum",
+       "mop",
+       "both"
+      ],
+      "description": "vacuum: hút bụi; mop: lau; both: hút và lau"
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "robot_vacuum.stop": {
+  "type": "function",
+  "function": {
+   "name": "robot_vacuum.stop",
+   "description": "[write] Dừng và về dock",
+   "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   }
+  }
+ },
+ "appliances.list": {
+  "type": "function",
+  "function": {
+   "name": "appliances.list",
+   "description": "[read] Danh sách thiết bị và chu trình khả dụng Trả về: appliances[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "type": {
+      "type": "string",
+      "enum": [
+       "washer",
+       "dishwasher",
+       "dryer",
+       "rice_cooker",
+       "microwave",
+       "air_purifier"
+      ]
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "appliances.start_cycle": {
+  "type": "function",
+  "function": {
+   "name": "appliances.start_cycle",
+   "description": "[write] Chạy chu trình",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "appliance_id": {
+      "type": "string",
+      "description": "ID thiết bị, lấy từ appliances.list",
+      "x-ref": "appliances.appliances"
+     },
+     "cycle": {
+      "type": "string",
+      "description": "Mã chu trình, phải nằm trong cycles của thiết bị (appliances.list), ví dụ quick, normal, eco"
+     },
+     "delay_minutes": {
+      "type": "integer",
+      "description": "Hẹn giờ chạy sau bao nhiêu phút. Số nguyên, không dấu chấm hay phẩy, ví dụ 2",
+      "minimum": 0
+     }
+    },
+    "required": [
+     "appliance_id",
+     "cycle"
+    ]
+   }
+  }
+ },
+ "appliances.stop": {
+  "type": "function",
+  "function": {
+   "name": "appliances.stop",
+   "description": "[write] Dừng thiết bị",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "appliance_id": {
+      "type": "string",
+      "description": "ID thiết bị, lấy từ appliances.list",
+      "x-ref": "appliances.appliances"
+     }
+    },
+    "required": [
+     "appliance_id"
+    ]
+   }
+  }
+ },
+ "home_energy.get_usage": {
+  "type": "function",
+  "function": {
+   "name": "home_energy.get_usage",
+   "description": "[read] Điện tiêu thụ (kWh, tiền) hôm nay, 7 ngày gần nhất (kèm từng ngày) hoặc từ đầu tháng Trả về: usage",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "period": {
+      "type": "string",
+      "enum": [
+       "today",
+       "week",
+       "month"
+      ],
+      "description": "today: hôm nay; week: 7 ngày gần nhất; month: từ đầu tháng đến nay"
+     }
+    },
+    "required": [
+     "period"
+    ]
+   }
+  }
+ },
+ "home_energy.set_alert": {
+  "type": "function",
+  "function": {
+   "name": "home_energy.set_alert",
+   "description": "[write] Đặt ngưỡng cảnh báo kWh/tháng Trả về: alert_threshold_kwh",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "threshold_kwh": {
+      "type": "integer",
+      "description": "Ngưỡng kWh/tháng. Số nguyên, không dấu chấm, phẩy hay đơn vị, ví dụ 300",
+      "exclusiveMinimum": 0
+     }
+    },
+    "required": [
+     "threshold_kwh"
+    ]
+   }
+  }
+ },
+ "alarm.list": {
+  "type": "function",
+  "function": {
+   "name": "alarm.list",
+   "description": "[read] Danh sách báo thức Trả về: alarms[]",
+   "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   }
+  }
+ },
+ "alarm.create": {
+  "type": "function",
+  "function": {
+   "name": "alarm.create",
+   "description": "[write] Tạo báo thức",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "time": {
+      "type": "string",
+      "description": "ISO-8601 đầy đủ giây và offset múi giờ, ví dụ 2026-11-11T05:30:00+07:00"
+     },
+     "label": {
+      "type": "string",
+      "x-match": "fuzzy"
+     },
+     "repeat": {
+      "type": "string",
+      "enum": [
+       "once",
+       "daily",
+       "weekdays",
+       "weekends"
+      ]
+     }
+    },
+    "required": [
+     "time"
+    ]
+   }
+  }
+ },
+ "alarm.update": {
+  "type": "function",
+  "function": {
+   "name": "alarm.update",
+   "description": "[write] Sửa giờ/nhãn báo thức",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "alarm_id": {
+      "type": "string",
+      "description": "ID báo thức, lấy từ alarm.list",
+      "x-ref": "alarm.alarms"
+     },
+     "time": {
+      "type": "string",
+      "description": "ISO-8601 đầy đủ giây và offset múi giờ, ví dụ 2026-11-11T05:30:00+07:00"
+     },
+     "label": {
+      "type": "string",
+      "x-match": "fuzzy"
+     },
+     "enabled": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "alarm_id"
+    ]
+   }
+  }
+ },
+ "alarm.delete": {
+  "type": "function",
+  "function": {
+   "name": "alarm.delete",
+   "description": "[write] Xoá báo thức",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "alarm_id": {
+      "type": "string",
+      "description": "ID báo thức, lấy từ alarm.list",
+      "x-ref": "alarm.alarms"
+     }
+    },
+    "required": [
+     "alarm_id"
+    ]
+   }
+  }
+ },
+ "reminders.list": {
+  "type": "function",
+  "function": {
+   "name": "reminders.list",
+   "description": "[read] Danh sách nhắc việc Trả về: reminders[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "date": {
+      "type": "string",
+      "description": "YYYY-MM-DD, ví dụ 2026-11-29"
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "reminders.create": {
+  "type": "function",
+  "function": {
+   "name": "reminders.create",
+   "description": "[write] Tạo nhắc việc",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "content": {
+      "type": "string",
+      "x-match": "fuzzy"
+     },
+     "time": {
+      "type": "string",
+      "description": "ISO-8601 đầy đủ giây và offset múi giờ, ví dụ 2026-11-11T05:30:00+07:00"
+     },
+     "repeat": {
+      "type": "string",
+      "enum": [
+       "once",
+       "daily",
+       "weekly"
+      ]
+     }
+    },
+    "required": [
+     "content",
+     "time"
+    ]
+   }
+  }
+ },
+ "reminders.complete": {
+  "type": "function",
+  "function": {
+   "name": "reminders.complete",
+   "description": "[write] Đánh dấu xong",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "reminder_id": {
+      "type": "string",
+      "description": "ID nhắc việc, lấy từ reminders.list",
+      "x-ref": "reminders.reminders"
+     }
+    },
+    "required": [
+     "reminder_id"
+    ]
+   }
+  }
+ },
+ "reminders.delete": {
+  "type": "function",
+  "function": {
+   "name": "reminders.delete",
+   "description": "[write] Xoá nhắc việc",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "reminder_id": {
+      "type": "string",
+      "description": "ID nhắc việc, lấy từ reminders.list",
+      "x-ref": "reminders.reminders"
+     }
+    },
+    "required": [
+     "reminder_id"
+    ]
+   }
+  }
+ },
+ "calendar.list_events": {
+  "type": "function",
+  "function": {
+   "name": "calendar.list_events",
+   "description": "[read] Danh sách sự kiện, lọc được theo khoảng ngày Trả về: events[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "date_from": {
+      "type": "string",
+      "description": "YYYY-MM-DD, ví dụ 2026-11-29"
+     },
+     "date_to": {
+      "type": "string",
+      "description": "YYYY-MM-DD, ví dụ 2026-11-29"
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "calendar.create_event": {
+  "type": "function",
+  "function": {
+   "name": "calendar.create_event",
+   "description": "[write] Tạo sự kiện",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "title": {
+      "type": "string",
+      "x-match": "fuzzy"
+     },
+     "start": {
+      "type": "string",
+      "description": "ISO-8601 đầy đủ giây và offset múi giờ, ví dụ 2026-11-11T05:30:00+07:00"
+     },
+     "end": {
+      "type": "string",
+      "description": "ISO-8601 đầy đủ giây và offset múi giờ, ví dụ 2026-11-11T05:30:00+07:00; bỏ trống thì mặc định bằng start + 1 giờ"
+     },
+     "location": {
+      "type": "string",
+      "x-match": "fuzzy"
+     },
+     "attendees": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "Danh sách ID"
+     }
+    },
+    "required": [
+     "title",
+     "start"
+    ]
+   }
+  }
+ },
+ "calendar.update_event": {
+  "type": "function",
+  "function": {
+   "name": "calendar.update_event",
+   "description": "[write] Sửa sự kiện",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "event_id": {
+      "type": "string",
+      "description": "ID sự kiện, lấy từ calendar.list_events",
+      "x-ref": "calendar.events"
+     },
+     "title": {
+      "type": "string",
+      "x-match": "fuzzy"
+     },
+     "start": {
+      "type": "string",
+      "description": "ISO-8601 đầy đủ giây và offset múi giờ, ví dụ 2026-11-11T05:30:00+07:00"
+     },
+     "end": {
+      "type": "string",
+      "description": "ISO-8601 đầy đủ giây và offset múi giờ, ví dụ 2026-11-11T05:30:00+07:00"
+     },
+     "location": {
+      "type": "string",
+      "x-match": "fuzzy"
+     }
+    },
+    "required": [
+     "event_id"
+    ]
+   }
+  }
+ },
+ "calendar.cancel_event": {
+  "type": "function",
+  "function": {
+   "name": "calendar.cancel_event",
+   "description": "[write] Huỷ sự kiện",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "event_id": {
+      "type": "string",
+      "description": "ID sự kiện, lấy từ calendar.list_events",
+      "x-ref": "calendar.events"
+     }
+    },
+    "required": [
+     "event_id"
+    ]
+   }
+  }
+ },
+ "notes.list": {
+  "type": "function",
+  "function": {
+   "name": "notes.list",
+   "description": "[read] Danh sách ghi chú Trả về: notes[]",
+   "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   }
+  }
+ },
+ "notes.create": {
+  "type": "function",
+  "function": {
+   "name": "notes.create",
+   "description": "[write] Tạo ghi chú",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "title": {
+      "type": "string",
+      "x-match": "fuzzy"
+     },
+     "content": {
+      "type": "string",
+      "x-match": "fuzzy"
+     }
+    },
+    "required": [
+     "content"
+    ]
+   }
+  }
+ },
+ "notes.append": {
+  "type": "function",
+  "function": {
+   "name": "notes.append",
+   "description": "[write] Thêm nội dung vào ghi chú",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "note_id": {
+      "type": "string",
+      "description": "ID ghi chú, lấy từ notes.list",
+      "x-ref": "notes.notes"
+     },
+     "content": {
+      "type": "string",
+      "x-match": "fuzzy"
+     }
+    },
+    "required": [
+     "note_id",
+     "content"
+    ]
+   }
+  }
+ },
+ "tasks.list": {
+  "type": "function",
+  "function": {
+   "name": "tasks.list",
+   "description": "[read] Danh sách việc Trả về: tasks[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "status": {
+      "type": "string",
+      "enum": [
+       "open",
+       "done"
+      ]
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "tasks.add": {
+  "type": "function",
+  "function": {
+   "name": "tasks.add",
+   "description": "[write] Thêm việc",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "title": {
+      "type": "string",
+      "x-match": "fuzzy"
+     },
+     "due": {
+      "type": "string",
+      "description": "ISO-8601 đầy đủ giây và offset múi giờ, ví dụ 2026-11-11T05:30:00+07:00",
+      "format": "date-time"
+     },
+     "priority": {
+      "type": "string",
+      "enum": [
+       "low",
+       "normal",
+       "high"
+      ]
+     }
+    },
+    "required": [
+     "title"
+    ]
+   }
+  }
+ },
+ "tasks.complete": {
+  "type": "function",
+  "function": {
+   "name": "tasks.complete",
+   "description": "[write] Hoàn thành việc",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "task_id": {
+      "type": "string",
+      "description": "ID việc, lấy từ tasks.list",
+      "x-ref": "tasks.tasks"
+     }
+    },
+    "required": [
+     "task_id"
+    ]
+   }
+  }
+ },
+ "contacts.search": {
+  "type": "function",
+  "function": {
+   "name": "contacts.search",
+   "description": "[read] Tìm liên hệ theo tên, quan hệ hoặc số điện thoại; so chuỗi con, không phân biệt hoa thường và dấu; không truyền query thì trả cả danh bạ Trả về: contacts[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "type": "string",
+      "description": "Tên, quan hệ (mẹ, vợ, sếp) hoặc số điện thoại"
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "contacts.get": {
+  "type": "function",
+  "function": {
+   "name": "contacts.get",
+   "description": "[read] Chi tiết liên hệ Trả về: contacts[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "contact_id": {
+      "type": "string",
+      "description": "ID liên hệ, lấy từ contacts.search",
+      "x-ref": "contacts.contacts"
+     }
+    },
+    "required": [
+     "contact_id"
+    ]
+   }
+  }
+ },
+ "contacts.update": {
+  "type": "function",
+  "function": {
+   "name": "contacts.update",
+   "description": "[write] Sửa số/email liên hệ",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "contact_id": {
+      "type": "string",
+      "description": "ID liên hệ, lấy từ contacts.search",
+      "x-ref": "contacts.contacts"
+     },
+     "phone": {
+      "type": "string",
+      "description": "Giữ nguyên chuỗi, ví dụ 09123456785"
+     },
+     "email": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "contact_id"
+    ],
+    "x-one-of": [
+     [
+      "phone"
+     ],
+     [
+      "email"
+     ]
+    ]
+   }
+  }
+ },
+ "phone.call": {
+  "type": "function",
+  "function": {
+   "name": "phone.call",
+   "description": "[write] Gọi thoại cho liên hệ hoặc số điện thoại. Bắt buộc một trong: contact_id hoặc phone_number",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "contact_id": {
+      "type": "string",
+      "description": "ID liên hệ, lấy từ contacts.search",
+      "x-ref": "contacts.contacts"
+     },
+     "phone_number": {
+      "type": "string",
+      "description": "Số điện thoại, giữ nguyên chuỗi, ví dụ 09123456785"
+     }
+    },
+    "required": [],
+    "x-one-of": [
+     [
+      "contact_id"
+     ],
+     [
+      "phone_number"
+     ]
+    ]
+   }
+  }
+ },
+ "phone.recent_calls": {
+  "type": "function",
+  "function": {
+   "name": "phone.recent_calls",
+   "description": "[read] Cuộc gọi gần đây/nhỡ Trả về: calls[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "missed_only": {
+      "type": "boolean"
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "sms.send": {
+  "type": "function",
+  "function": {
+   "name": "sms.send",
+   "description": "[write] Gửi SMS cho liên hệ hoặc số điện thoại. Bắt buộc một trong: contact_id hoặc phone_number; bắt buộc: content",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "contact_id": {
+      "type": "string",
+      "description": "ID liên hệ, lấy từ contacts.search",
+      "x-ref": "contacts.contacts"
+     },
+     "phone_number": {
+      "type": "string",
+      "description": "Số điện thoại, giữ nguyên chuỗi, ví dụ 09123456785"
+     },
+     "content": {
+      "type": "string",
+      "x-match": "fuzzy"
+     }
+    },
+    "required": [
+     "content"
+    ],
+    "x-one-of": [
+     [
+      "contact_id"
+     ],
+     [
+      "phone_number"
+     ]
+    ]
+   }
+  }
+ },
+ "sms.read_recent": {
+  "type": "function",
+  "function": {
+   "name": "sms.read_recent",
+   "description": "[read] Tin nhắn gần đây Trả về: messages[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "contact_id": {
+      "type": "string",
+      "description": "ID liên hệ, lấy từ contacts.search",
+      "x-ref": "contacts.contacts"
+     },
+     "limit": {
+      "type": "integer",
+      "description": "Số nguyên, không dấu chấm hay phẩy, ví dụ 2"
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "chat_ott.list_chats": {
+  "type": "function",
+  "function": {
+   "name": "chat_ott.list_chats",
+   "description": "[read] Danh sách cuộc trò chuyện/nhóm Trả về: chats[]",
+   "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   }
+  }
+ },
+ "chat_ott.read_chat": {
+  "type": "function",
+  "function": {
+   "name": "chat_ott.read_chat",
+   "description": "[read] Đọc tin gần đây trong cuộc trò chuyện Trả về: messages[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "chat_id": {
+      "type": "string",
+      "description": "ID cuộc trò chuyện, lấy từ chat_ott.list_chats",
+      "x-ref": "chat_ott.chats"
+     },
+     "limit": {
+      "type": "integer",
+      "description": "Số nguyên, không dấu chấm hay phẩy, ví dụ 2"
+     }
+    },
+    "required": [
+     "chat_id"
+    ]
+   }
+  }
+ },
+ "chat_ott.send_message": {
+  "type": "function",
+  "function": {
+   "name": "chat_ott.send_message",
+   "description": "[write] Gửi tin vào cuộc trò chuyện",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "chat_id": {
+      "type": "string",
+      "description": "ID cuộc trò chuyện, lấy từ chat_ott.list_chats",
+      "x-ref": "chat_ott.chats"
+     },
+     "content": {
+      "type": "string",
+      "x-match": "fuzzy"
+     }
+    },
+    "required": [
+     "chat_id",
+     "content"
+    ]
+   }
+  }
+ },
+ "chat_ott.send_location": {
+  "type": "function",
+  "function": {
+   "name": "chat_ott.send_location",
+   "description": "[write] Gửi vị trí hiện tại",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "chat_id": {
+      "type": "string",
+      "description": "ID cuộc trò chuyện, lấy từ chat_ott.list_chats",
+      "x-ref": "chat_ott.chats"
+     }
+    },
+    "required": [
+     "chat_id"
+    ]
+   }
+  }
+ },
+ "chat_ott.call": {
+  "type": "function",
+  "function": {
+   "name": "chat_ott.call",
+   "description": "[write] Gọi thoại/video qua OTT",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "chat_id": {
+      "type": "string",
+      "description": "ID cuộc trò chuyện, lấy từ chat_ott.list_chats",
+      "x-ref": "chat_ott.chats"
+     },
+     "video": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "chat_id"
+    ]
+   }
+  }
+ },
+ "email.list": {
+  "type": "function",
+  "function": {
+   "name": "email.list",
+   "description": "[read] Danh sách email, lọc được theo chưa đọc Trả về: emails[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "unread_only": {
+      "type": "boolean"
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "email.read": {
+  "type": "function",
+  "function": {
+   "name": "email.read",
+   "description": "[read] Đọc nội dung email Trả về: email",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "email_id": {
+      "type": "string",
+      "description": "ID email, lấy từ email.list",
+      "x-ref": "email.emails"
+     }
+    },
+    "required": [
+     "email_id"
+    ]
+   }
+  }
+ },
+ "email.send": {
+  "type": "function",
+  "function": {
+   "name": "email.send",
+   "description": "[write] Gửi email (lưu vào thư đã gửi) Trả về: email",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "to": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "Danh sách địa chỉ email người nhận, lấy từ contacts.search (trường email) hoặc địa chỉ người dùng đọc, ví dụ [\"lan.nguyen@example.test\"]"
+     },
+     "subject": {
+      "type": "string",
+      "x-match": "fuzzy"
+     },
+     "body": {
+      "type": "string",
+      "x-match": "fuzzy"
+     },
+     "cc": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "Danh sách địa chỉ email đồng gửi (CC), cùng định dạng với to"
+     }
+    },
+    "required": [
+     "to",
+     "subject",
+     "body"
+    ]
+   }
+  }
+ },
+ "email.create_draft": {
+  "type": "function",
+  "function": {
+   "name": "email.create_draft",
+   "description": "[write] Soạn và lưu email nháp, chưa gửi Trả về: draft",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "to": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "Danh sách địa chỉ email người nhận, lấy từ contacts.search (trường email) hoặc địa chỉ người dùng đọc, ví dụ [\"lan.nguyen@example.test\"]"
+     },
+     "subject": {
+      "type": "string",
+      "x-match": "fuzzy"
+     },
+     "body": {
+      "type": "string",
+      "x-match": "fuzzy"
+     },
+     "cc": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "Danh sách địa chỉ email đồng gửi (CC), cùng định dạng với to"
+     }
+    },
+    "required": [
+     "to",
+     "subject",
+     "body"
+    ]
+   }
+  }
+ },
+ "email.reply": {
+  "type": "function",
+  "function": {
+   "name": "email.reply",
+   "description": "[write] Trả lời email Trả về: email",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "email_id": {
+      "type": "string",
+      "description": "ID email, lấy từ email.list",
+      "x-ref": "email.emails"
+     },
+     "body": {
+      "type": "string",
+      "x-match": "fuzzy"
+     }
+    },
+    "required": [
+     "email_id",
+     "body"
+    ]
+   }
+  }
+ },
+ "email.archive": {
+  "type": "function",
+  "function": {
+   "name": "email.archive",
+   "description": "[write] Lưu trữ/xoá email",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "email_id": {
+      "type": "string",
+      "description": "ID email, lấy từ email.list",
+      "x-ref": "email.emails"
+     },
+     "action": {
+      "type": "string",
+      "enum": [
+       "archive",
+       "delete"
+      ]
+     }
+    },
+    "required": [
+     "email_id",
+     "action"
+    ]
+   }
+  }
+ },
+ "video_meeting.list_meetings": {
+  "type": "function",
+  "function": {
+   "name": "video_meeting.list_meetings",
+   "description": "[read] Cuộc họp sắp tới Trả về: meetings[]",
+   "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   }
+  }
+ },
+ "video_meeting.create": {
+  "type": "function",
+  "function": {
+   "name": "video_meeting.create",
+   "description": "[write] Tạo phòng họp",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "title": {
+      "type": "string",
+      "x-match": "fuzzy"
+     },
+     "start": {
+      "type": "string",
+      "description": "ISO-8601 đầy đủ giây và offset múi giờ, ví dụ 2026-11-11T05:30:00+07:00",
+      "format": "date-time"
+     },
+     "attendees": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "Danh sách ID liên hệ, lấy từ contacts.search, ví dụ [\"c_01\", \"c_03\"]"
+     }
+    },
+    "required": [
+     "title",
+     "start"
+    ]
+   }
+  }
+ },
+ "video_meeting.join": {
+  "type": "function",
+  "function": {
+   "name": "video_meeting.join",
+   "description": "[write] Tham gia cuộc họp",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "meeting_id": {
+      "type": "string",
+      "description": "ID cuộc họp, lấy từ video_meeting.list_meetings",
+      "x-ref": "video_meeting.meetings"
+     }
+    },
+    "required": [
+     "meeting_id"
+    ]
+   }
+  }
+ },
+ "banking.get_balance": {
+  "type": "function",
+  "function": {
+   "name": "banking.get_balance",
+   "description": "[read] Số dư các tài khoản Trả về: accounts[]",
+   "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   }
+  }
+ },
+ "banking.list_transactions": {
+  "type": "function",
+  "function": {
+   "name": "banking.list_transactions",
+   "description": "[read] Giao dịch gần đây Trả về: transactions[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "account_id": {
+      "type": "string",
+      "description": "ID tài khoản, lấy từ banking.get_balance",
+      "x-ref": "banking.accounts"
+     },
+     "limit": {
+      "type": "integer",
+      "description": "Số nguyên, không dấu chấm hay phẩy, ví dụ 2"
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "banking.list_beneficiaries": {
+  "type": "function",
+  "function": {
+   "name": "banking.list_beneficiaries",
+   "description": "[read] Người thụ hưởng đã lưu Trả về: beneficiaries[]",
+   "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   }
+  }
+ },
+ "banking.transfer": {
+  "type": "function",
+  "function": {
+   "name": "banking.transfer",
+   "description": "[write] Chuyển tiền cho người thụ hưởng",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "from_account_id": {
+      "type": "string",
+      "description": "ID tài khoản, lấy từ banking.get_balance",
+      "x-ref": "banking.accounts"
+     },
+     "beneficiary_id": {
+      "type": "string",
+      "description": "ID người thụ hưởng, lấy từ banking.list_beneficiaries",
+      "x-ref": "banking.beneficiaries"
+     },
+     "amount": {
+      "type": "integer",
+      "description": "Số nguyên, không dấu chấm, phẩy hay đơn vị, ví dụ 1200000",
+      "exclusiveMinimum": 0
+     },
+     "note": {
+      "type": "string",
+      "x-match": "fuzzy"
+     }
+    },
+    "required": [
+     "from_account_id",
+     "beneficiary_id",
+     "amount"
+    ]
+   }
+  }
+ },
+ "banking.open_savings": {
+  "type": "function",
+  "function": {
+   "name": "banking.open_savings",
+   "description": "[write] Gửi tiết kiệm",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "from_account_id": {
+      "type": "string",
+      "description": "ID tài khoản, lấy từ banking.get_balance",
+      "x-ref": "banking.accounts"
+     },
+     "amount": {
+      "type": "integer",
+      "description": "Số nguyên, không dấu chấm, phẩy hay đơn vị, ví dụ 1200000",
+      "exclusiveMinimum": 0
+     },
+     "term_months": {
+      "type": "integer",
+      "description": "Số nguyên, không dấu chấm hay phẩy, ví dụ 2",
+      "exclusiveMinimum": 0
+     }
+    },
+    "required": [
+     "from_account_id",
+     "amount",
+     "term_months"
+    ]
+   }
+  }
+ },
+ "ewallet.get_balance": {
+  "type": "function",
+  "function": {
+   "name": "ewallet.get_balance",
+   "description": "[read] Số dư ví Trả về: balance",
+   "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   }
+  }
+ },
+ "ewallet.transfer": {
+  "type": "function",
+  "function": {
+   "name": "ewallet.transfer",
+   "description": "[write] Chuyển tiền ví tới liên hệ hoặc số điện thoại. Bắt buộc một trong: contact_id hoặc phone; bắt buộc: amount",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "contact_id": {
+      "type": "string",
+      "description": "ID liên hệ, lấy từ contacts.search",
+      "x-ref": "contacts.contacts"
+     },
+     "phone": {
+      "type": "string",
+      "description": "Số điện thoại, giữ nguyên chuỗi, ví dụ 09123456785"
+     },
+     "amount": {
+      "type": "integer",
+      "description": "Số nguyên, không dấu chấm, phẩy hay đơn vị, ví dụ 1200000",
+      "exclusiveMinimum": 0
+     },
+     "note": {
+      "type": "string",
+      "x-match": "fuzzy"
+     }
+    },
+    "required": [
+     "amount"
+    ],
+    "x-one-of": [
+     [
+      "contact_id"
+     ],
+     [
+      "phone"
+     ]
+    ]
+   }
+  }
+ },
+ "ewallet.topup_mobile": {
+  "type": "function",
+  "function": {
+   "name": "ewallet.topup_mobile",
+   "description": "[write] Nạp tiền điện thoại",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "phone": {
+      "type": "string",
+      "description": "Giữ nguyên chuỗi, ví dụ 09123456785"
+     },
+     "amount": {
+      "type": "integer",
+      "description": "Số nguyên, không dấu chấm, phẩy hay đơn vị, ví dụ 1200000",
+      "exclusiveMinimum": 0
+     }
+    },
+    "required": [
+     "phone",
+     "amount"
+    ]
+   }
+  }
+ },
+ "ewallet.pay_qr": {
+  "type": "function",
+  "function": {
+   "name": "ewallet.pay_qr",
+   "description": "[write] Thanh toán QR của một quán/merchant bằng ví; merchant_id lấy từ food_delivery.list_restaurants (trường merchant_id của quán)",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "merchant_id": {
+      "type": "string",
+      "description": "ID merchant của quán (trường merchant_id trong kết quả food_delivery.list_restaurants), không phải id quán"
+     },
+     "amount": {
+      "type": "integer",
+      "description": "Số nguyên, không dấu chấm, phẩy hay đơn vị, ví dụ 1200000",
+      "exclusiveMinimum": 0
+     }
+    },
+    "required": [
+     "merchant_id",
+     "amount"
+    ]
+   }
+  }
+ },
+ "bill_payment.list_bills": {
+  "type": "function",
+  "function": {
+   "name": "bill_payment.list_bills",
+   "description": "[read] Hoá đơn chưa thanh toán Trả về: bills[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "type": {
+      "type": "string",
+      "enum": [
+       "electricity",
+       "water",
+       "internet",
+       "tv",
+       "tuition",
+       "phone"
+      ]
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "bill_payment.pay": {
+  "type": "function",
+  "function": {
+   "name": "bill_payment.pay",
+   "description": "[write] Thanh toán hoá đơn",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "bill_id": {
+      "type": "string",
+      "description": "ID hoá đơn, lấy từ bill_payment.list_bills",
+      "x-ref": "bill_payment.bills"
+     },
+     "source": {
+      "type": "string",
+      "enum": [
+       "bank",
+       "ewallet"
+      ]
+     }
+    },
+    "required": [
+     "bill_id",
+     "source"
+    ]
+   }
+  }
+ },
+ "bill_payment.schedule_autopay": {
+  "type": "function",
+  "function": {
+   "name": "bill_payment.schedule_autopay",
+   "description": "[write] Bật tự động thanh toán",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "type": {
+      "type": "string"
+     },
+     "enabled": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "type",
+     "enabled"
+    ]
+   }
+  }
+ },
+ "loyalty.list_vouchers": {
+  "type": "function",
+  "function": {
+   "name": "loyalty.list_vouchers",
+   "description": "[read] Voucher đang có Trả về: vouchers[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "merchant": {
+      "type": "string"
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "loyalty.get_points": {
+  "type": "function",
+  "function": {
+   "name": "loyalty.get_points",
+   "description": "[read] Điểm thành viên Trả về: points[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "program": {
+      "type": "string"
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "loyalty.redeem": {
+  "type": "function",
+  "function": {
+   "name": "loyalty.redeem",
+   "description": "[write] Đổi điểm lấy voucher",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "program": {
+      "type": "string"
+     },
+     "reward_id": {
+      "type": "string",
+      "description": "ID lấy từ state hoặc kết quả tool đọc"
+     }
+    },
+    "required": [
+     "program",
+     "reward_id"
+    ]
+   }
+  }
+ },
+ "weather.get_current": {
+  "type": "function",
+  "function": {
+   "name": "weather.get_current",
+   "description": "[read] Thời tiết hiện tại Trả về: current",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "location": {
+      "type": "string",
+      "x-match": "fuzzy"
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "weather.get_forecast": {
+  "type": "function",
+  "function": {
+   "name": "weather.get_forecast",
+   "description": "[read] Dự báo theo ngày Trả về: forecast",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "location": {
+      "type": "string",
+      "x-match": "fuzzy",
+      "description": "Tên thành phố; bỏ trống = thành phố của người dùng (địa điểm trong thành phố cũng trả dữ liệu thành phố)"
+     },
+     "date": {
+      "type": "string",
+      "description": "YYYY-MM-DD, ví dụ 2026-11-29"
+     }
+    },
+    "required": [
+     "date"
+    ]
+   }
+  }
+ },
+ "gold_price.get_price": {
+  "type": "function",
+  "function": {
+   "name": "gold_price.get_price",
+   "description": "[read] Giá mua/bán theo loại Trả về: prices[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "type": {
+      "type": "string",
+      "enum": [
+       "sjc",
+       "ring",
+       "world"
+      ]
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "fuel_price.get_price": {
+  "type": "function",
+  "function": {
+   "name": "fuel_price.get_price",
+   "description": "[read] Giá theo loại nhiên liệu Trả về: prices[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "type": {
+      "type": "string",
+      "enum": [
+       "ron95",
+       "e5",
+       "diesel"
+      ]
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "lottery.get_results": {
+  "type": "function",
+  "function": {
+   "name": "lottery.get_results",
+   "description": "[read] Kết quả theo đài và ngày Trả về: results",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "province": {
+      "type": "string"
+     },
+     "date": {
+      "type": "string",
+      "description": "YYYY-MM-DD, ví dụ 2026-11-29"
+     }
+    },
+    "required": [
+     "province"
+    ]
+   }
+  }
+ },
+ "lottery.check_ticket": {
+  "type": "function",
+  "function": {
+   "name": "lottery.check_ticket",
+   "description": "[read] Dò vé số Trả về: check",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "province": {
+      "type": "string"
+     },
+     "date": {
+      "type": "string",
+      "description": "YYYY-MM-DD, ví dụ 2026-11-29"
+     },
+     "number": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "province",
+     "date",
+     "number"
+    ]
+   }
+  }
+ },
+ "exchange_rate.get_rate": {
+  "type": "function",
+  "function": {
+   "name": "exchange_rate.get_rate",
+   "description": "[read] Tỷ giá cặp tiền Trả về: rate",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "from_currency": {
+      "type": "string"
+     },
+     "to_currency": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "from_currency",
+     "to_currency"
+    ]
+   }
+  }
+ },
+ "exchange_rate.convert": {
+  "type": "function",
+  "function": {
+   "name": "exchange_rate.convert",
+   "description": "[read] Quy đổi số tiền Trả về: result",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "amount": {
+      "type": "integer",
+      "description": "Số nguyên, không dấu chấm, phẩy hay đơn vị, ví dụ 1200000",
+      "minimum": 0
+     },
+     "from_currency": {
+      "type": "string"
+     },
+     "to_currency": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "amount",
+     "from_currency",
+     "to_currency"
+    ]
+   }
+  }
+ },
+ "news.headlines": {
+  "type": "function",
+  "function": {
+   "name": "news.headlines",
+   "description": "[read] Tin nổi bật theo chủ đề Trả về: articles[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "topic": {
+      "type": "string",
+      "enum": [
+       "general",
+       "sports",
+       "business",
+       "tech",
+       "entertainment"
+      ],
+      "description": "Chủ đề tin; bỏ trống để lấy tin nổi bật mọi chủ đề"
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "news.search": {
+  "type": "function",
+  "function": {
+   "name": "news.search",
+   "description": "[read] Tìm tin theo từ khoá (khớp theo từ khoá: chỉ cần một từ của query có trong tiêu đề/tóm tắt/nguồn/chủ đề) Trả về: articles[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "type": "string",
+      "description": "Từ khoá tìm trong tiêu đề, tóm tắt, nguồn tin; khớp theo từ khoá, kết quả xếp theo số từ trùng"
+     }
+    },
+    "required": [
+     "query"
+    ]
+   }
+  }
+ },
+ "news.save": {
+  "type": "function",
+  "function": {
+   "name": "news.save",
+   "description": "[write] Lưu bài để đọc sau",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "article_id": {
+      "type": "string",
+      "description": "ID bài báo, lấy từ news.search hoặc news.headlines",
+      "x-ref": "news.articles"
+     }
+    },
+    "required": [
+     "article_id"
+    ]
+   }
+  }
+ },
+ "calculator.calculate": {
+  "type": "function",
+  "function": {
+   "name": "calculator.calculate",
+   "description": "[read] Tính biểu thức Trả về: value",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "expression": {
+      "type": "string",
+      "x-match": "fuzzy",
+      "description": "Biểu thức số học chỉ gồm số và + - * / ( ) . %, ví dụ (120000+85000)*3 hoặc 200000*15%"
+     }
+    },
+    "required": [
+     "expression"
+    ]
+   }
+  }
+ },
+ "calculator.convert_unit": {
+  "type": "function",
+  "function": {
+   "name": "calculator.convert_unit",
+   "description": "[read] Quy đổi đơn vị Trả về: value",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "number",
+      "description": "Số cần quy đổi, dấu chấm thập phân, ví dụ 1.5"
+     },
+     "from_unit": {
+      "type": "string",
+      "enum": [
+       "mm",
+       "cm",
+       "m",
+       "km",
+       "g",
+       "kg",
+       "ml",
+       "l",
+       "c",
+       "f"
+      ],
+      "description": "Đơn vị gốc: mm, cm, m, km (độ dài); g, kg (khối lượng); ml, l (thể tích); c, f (độ C, độ F)"
+     },
+     "to_unit": {
+      "type": "string",
+      "enum": [
+       "mm",
+       "cm",
+       "m",
+       "km",
+       "g",
+       "kg",
+       "ml",
+       "l",
+       "c",
+       "f"
+      ],
+      "description": "Đơn vị đích, cùng loại với from_unit"
+     }
+    },
+    "required": [
+     "value",
+     "from_unit",
+     "to_unit"
+    ]
+   }
+  }
+ },
+ "maps.search_place": {
+  "type": "function",
+  "function": {
+   "name": "maps.search_place",
+   "description": "[read] Tìm địa điểm theo từ khoá (khớp theo từ khoá: chỉ cần một từ của query có trong tên/loại/mô tả/địa chỉ), gần vị trí tuỳ chọn Trả về: places[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "type": "string",
+      "description": "Từ khoá tên hoặc loại địa điểm, ví dụ 'cà phê', 'rạp phim'; khớp theo từ khoá, kết quả xếp theo số từ trùng"
+     },
+     "near": {
+      "type": "string",
+      "description": "Khu vực/địa danh lân cận, ví dụ 'Hồ Tây'; khớp theo từ khoá trên địa chỉ/mô tả/tên (chỉ cần một từ trùng)",
+      "x-match": "fuzzy"
+     }
+    },
+    "required": [
+     "query"
+    ]
+   }
+  }
+ },
+ "maps.get_route": {
+  "type": "function",
+  "function": {
+   "name": "maps.get_route",
+   "description": "[read] Chỉ đường và thời gian dự kiến Trả về: route{distance_km, duration_min}",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "origin": {
+      "type": "string",
+      "description": "Điểm đi: địa chỉ hoặc tên địa điểm; 'nhà' → home_address của profile",
+      "x-match": "fuzzy"
+     },
+     "destination": {
+      "type": "string",
+      "description": "Điểm đến: địa chỉ hoặc tên địa điểm; 'công ty' → work_address của profile",
+      "x-match": "fuzzy"
+     },
+     "mode": {
+      "type": "string",
+      "enum": [
+       "car",
+       "motorbike",
+       "walk",
+       "transit"
+      ],
+      "description": "Phương tiện; mặc định motorbike"
+     }
+    },
+    "required": [
+     "origin",
+     "destination"
+    ]
+   }
+  }
+ },
+ "maps.save_place": {
+  "type": "function",
+  "function": {
+   "name": "maps.save_place",
+   "description": "[write] Lưu địa điểm yêu thích",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "place_id": {
+      "type": "string",
+      "description": "ID địa điểm, lấy từ maps.search_place",
+      "x-ref": "maps.places"
+     },
+     "label": {
+      "type": "string",
+      "x-match": "fuzzy"
+     }
+    },
+    "required": [
+     "place_id",
+     "label"
+    ]
+   }
+  }
+ },
+ "food_delivery.list_restaurants": {
+  "type": "function",
+  "function": {
+   "name": "food_delivery.list_restaurants",
+   "description": "[read] Danh sách quán giao tận nơi quanh đây (tên, nhóm món, đánh giá) Trả về: restaurants[]",
+   "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   }
+  }
+ },
+ "food_delivery.get_menu": {
+  "type": "function",
+  "function": {
+   "name": "food_delivery.get_menu",
+   "description": "[read] Thực đơn quán Trả về: menu[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "restaurant_id": {
+      "type": "string",
+      "description": "ID quán, lấy từ food_delivery.list_restaurants",
+      "x-ref": "food_delivery.restaurants"
+     }
+    },
+    "required": [
+     "restaurant_id"
+    ]
+   }
+  }
+ },
+ "food_delivery.order_history": {
+  "type": "function",
+  "function": {
+   "name": "food_delivery.order_history",
+   "description": "[read] Đơn đã đặt gần đây Trả về: orders[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "limit": {
+      "type": "integer",
+      "description": "Số nguyên, không dấu chấm hay phẩy, ví dụ 2"
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "food_delivery.place_order": {
+  "type": "function",
+  "function": {
+   "name": "food_delivery.place_order",
+   "description": "[write] Đặt đơn",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "restaurant_id": {
+      "type": "string",
+      "description": "ID quán, lấy từ food_delivery.list_restaurants",
+      "x-ref": "food_delivery.restaurants"
+     },
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "item_id": {
+         "type": "string"
+        },
+        "quantity": {
+         "type": "integer"
+        },
+        "note": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "item_id",
+        "quantity"
+       ]
+      }
+     },
+     "address": {
+      "type": "string",
+      "x-match": "fuzzy"
+     },
+     "payment": {
+      "type": "string",
+      "enum": [
+       "cash",
+       "ewallet",
+       "bank"
+      ]
+     }
+    },
+    "required": [
+     "restaurant_id",
+     "items"
+    ]
+   }
+  }
+ },
+ "food_delivery.cancel_order": {
+  "type": "function",
+  "function": {
+   "name": "food_delivery.cancel_order",
+   "description": "[write] Huỷ đơn đang chờ",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "order_id": {
+      "type": "string",
+      "description": "ID đơn, lấy từ food_delivery.order_history",
+      "x-ref": "food_delivery.orders"
+     }
+    },
+    "required": [
+     "order_id"
+    ]
+   }
+  }
+ },
+ "ride_hailing.get_quotes": {
+  "type": "function",
+  "function": {
+   "name": "ride_hailing.get_quotes",
+   "description": "[read] Báo giá và thời gian đón Trả về: quotes[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "pickup": {
+      "type": "string",
+      "x-match": "fuzzy"
+     },
+     "dropoff": {
+      "type": "string",
+      "x-match": "fuzzy"
+     },
+     "vehicle": {
+      "type": "string",
+      "enum": [
+       "bike",
+       "car4",
+       "car7"
+      ]
+     }
+    },
+    "required": [
+     "pickup",
+     "dropoff"
+    ]
+   }
+  }
+ },
+ "ride_hailing.book": {
+  "type": "function",
+  "function": {
+   "name": "ride_hailing.book",
+   "description": "[write] Đặt chuyến",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "pickup": {
+      "type": "string",
+      "x-match": "fuzzy",
+      "description": "Điểm đón: địa chỉ hoặc tên địa điểm; 'nhà'/'công ty' → home_address/work_address của profile"
+     },
+     "dropoff": {
+      "type": "string",
+      "x-match": "fuzzy",
+      "description": "Điểm đến: địa chỉ hoặc tên địa điểm (lấy từ lịch/kết quả tìm kiếm khi người dùng chỉ việc đó)"
+     },
+     "vehicle": {
+      "type": "string",
+      "enum": [
+       "bike",
+       "car4",
+       "car7"
+      ]
+     },
+     "schedule_time": {
+      "type": "string",
+      "description": "Giờ đón khi đặt trước, ISO-8601 đầy đủ giây và offset múi giờ, ví dụ 2026-11-11T05:30:00+07:00; bỏ trống khi đặt ngay (giờ bằng hoặc trước current_time cũng coi là đặt ngay)"
+     },
+     "payment": {
+      "type": "string",
+      "enum": [
+       "cash",
+       "ewallet"
+      ]
+     }
+    },
+    "required": [
+     "pickup",
+     "dropoff",
+     "vehicle"
+    ]
+   }
+  }
+ },
+ "ride_hailing.cancel": {
+  "type": "function",
+  "function": {
+   "name": "ride_hailing.cancel",
+   "description": "[write] Huỷ chuyến",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "ride_id": {
+      "type": "string",
+      "description": "ID chuyến xe, lấy từ ride_hailing.get_ride",
+      "x-ref": "ride_hailing.rides"
+     }
+    },
+    "required": [
+     "ride_id"
+    ]
+   }
+  }
+ },
+ "ride_hailing.get_ride": {
+  "type": "function",
+  "function": {
+   "name": "ride_hailing.get_ride",
+   "description": "[read] Trạng thái chuyến hiện tại Trả về: ride",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "ride_id": {
+      "type": "string",
+      "description": "ID chuyến xe, lấy từ ride_hailing.get_ride",
+      "x-ref": "ride_hailing.rides"
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "flights.search": {
+  "type": "function",
+  "function": {
+   "name": "flights.search",
+   "description": "[read] Tìm chuyến bay theo điểm đi, điểm đến và ngày Trả về: flights[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "origin": {
+      "type": "string",
+      "description": "Điểm đi: mã IATA (SGN, HAN, DAD) hoặc tên thành phố, ví dụ 'Hà Nội'"
+     },
+     "destination": {
+      "type": "string",
+      "description": "Điểm đến: mã IATA (SGN, HAN, DAD) hoặc tên thành phố, ví dụ 'Đà Nẵng'"
+     },
+     "date": {
+      "type": "string",
+      "description": "YYYY-MM-DD, ví dụ 2026-11-29"
+     },
+     "passengers": {
+      "type": "integer",
+      "description": "Số nguyên, không dấu chấm hay phẩy, ví dụ 2"
+     }
+    },
+    "required": [
+     "origin",
+     "destination",
+     "date"
+    ]
+   }
+  }
+ },
+ "flights.book": {
+  "type": "function",
+  "function": {
+   "name": "flights.book",
+   "description": "[write] Đặt vé",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "flight_id": {
+      "type": "string",
+      "description": "ID chuyến bay, lấy từ flights.search",
+      "x-ref": "flights.flights"
+     },
+     "passengers": {
+      "type": "integer",
+      "description": "Số nguyên, không dấu chấm hay phẩy, ví dụ 2"
+     },
+     "seat_class": {
+      "type": "string",
+      "enum": [
+       "economy",
+       "business"
+      ]
+     }
+    },
+    "required": [
+     "flight_id",
+     "passengers"
+    ]
+   }
+  }
+ },
+ "flights.my_bookings": {
+  "type": "function",
+  "function": {
+   "name": "flights.my_bookings",
+   "description": "[read] Vé đã đặt Trả về: bookings[]",
+   "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   }
+  }
+ },
+ "flights.cancel": {
+  "type": "function",
+  "function": {
+   "name": "flights.cancel",
+   "description": "[write] Huỷ vé",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "booking_id": {
+      "type": "string",
+      "description": "ID vé đã đặt, lấy từ flights.my_bookings",
+      "x-ref": "flights.bookings"
+     }
+    },
+    "required": [
+     "booking_id"
+    ]
+   }
+  }
+ },
+ "flights.check_in": {
+  "type": "function",
+  "function": {
+   "name": "flights.check_in",
+   "description": "[write] Làm thủ tục online",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "booking_id": {
+      "type": "string",
+      "description": "ID vé đã đặt, lấy từ flights.my_bookings",
+      "x-ref": "flights.bookings"
+     }
+    },
+    "required": [
+     "booking_id"
+    ]
+   }
+  }
+ },
+ "shopping_list.get": {
+  "type": "function",
+  "function": {
+   "name": "shopping_list.get",
+   "description": "[read] Xem danh sách Trả về: items[]",
+   "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   }
+  }
+ },
+ "shopping_list.add": {
+  "type": "function",
+  "function": {
+   "name": "shopping_list.add",
+   "description": "[write] Thêm món",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "x-match": "fuzzy",
+      "description": "Tên món cần mua, ví dụ dưa chuột"
+     },
+     "quantity": {
+      "type": "integer",
+      "description": "Số lượng, số nguyên, không dấu chấm hay phẩy, ví dụ 2; mặc định 1",
+      "exclusiveMinimum": 0
+     }
+    },
+    "required": [
+     "name"
+    ]
+   }
+  }
+ },
+ "shopping_list.remove": {
+  "type": "function",
+  "function": {
+   "name": "shopping_list.remove",
+   "description": "[write] Xoá món",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "item_id": {
+      "type": "string",
+      "description": "ID món, lấy từ shopping_list.get",
+      "x-ref": "shopping_list.items"
+     }
+    },
+    "required": [
+     "item_id"
+    ]
+   }
+  }
+ },
+ "shopping_list.check": {
+  "type": "function",
+  "function": {
+   "name": "shopping_list.check",
+   "description": "[write] Đánh dấu đã mua",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "item_id": {
+      "type": "string",
+      "description": "ID món, lấy từ shopping_list.get",
+      "x-ref": "shopping_list.items"
+     }
+    },
+    "required": [
+     "item_id"
+    ]
+   }
+  }
+ },
+ "package_tracking.track": {
+  "type": "function",
+  "function": {
+   "name": "package_tracking.track",
+   "description": "[read] Trạng thái vận đơn (không truyền tracking_id: mọi kiện đang theo dõi) Trả về: shipments[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "tracking_id": {
+      "type": "string",
+      "description": "Mã vận đơn, giữ nguyên chuỗi, ví dụ GST583920174; lấy từ package_tracking.track"
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "package_tracking.reschedule_delivery": {
+  "type": "function",
+  "function": {
+   "name": "package_tracking.reschedule_delivery",
+   "description": "[write] Hẹn lại giờ giao Trả về: shipment",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "tracking_id": {
+      "type": "string",
+      "description": "Mã vận đơn, giữ nguyên chuỗi, ví dụ GST583920174; lấy từ package_tracking.track"
+     },
+     "time": {
+      "type": "string",
+      "description": "ISO-8601 đầy đủ giây và offset múi giờ, ví dụ 2026-11-11T05:30:00+07:00"
+     }
+    },
+    "required": [
+     "tracking_id",
+     "time"
+    ]
+   }
+  }
+ },
+ "package_tracking.schedule_pickup": {
+  "type": "function",
+  "function": {
+   "name": "package_tracking.schedule_pickup",
+   "description": "[write] Hẹn bưu tá đến lấy hàng gửi đi Trả về: pickup",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "address": {
+      "type": "string",
+      "description": "Địa chỉ lấy hàng, giữ nguyên như người dùng nói, ví dụ 18 phố Hàng Cót",
+      "x-match": "fuzzy"
+     },
+     "date": {
+      "type": "string",
+      "description": "YYYY-MM-DD, ví dụ 2026-11-29",
+      "format": "date"
+     }
+    },
+    "required": [
+     "address",
+     "date"
+    ]
+   }
+  }
+ },
+ "music.list_tracks": {
+  "type": "function",
+  "function": {
+   "name": "music.list_tracks",
+   "description": "[read] Thư viện bài hát và playlist Trả về: tracks[], playlists[]",
+   "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   }
+  }
+ },
+ "music.play": {
+  "type": "function",
+  "function": {
+   "name": "music.play",
+   "description": "[write] Phát một bài hoặc một playlist. Bắt buộc một trong: track_id hoặc playlist_id",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "track_id": {
+      "type": "string",
+      "description": "ID bài hát, lấy từ music.list_tracks",
+      "x-ref": "music.tracks"
+     },
+     "playlist_id": {
+      "type": "string",
+      "description": "ID playlist, lấy từ music.list_tracks",
+      "x-ref": "music.playlists"
+     },
+     "device": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "x-one-of": [
+     [
+      "track_id"
+     ],
+     [
+      "playlist_id"
+     ]
+    ]
+   }
+  }
+ },
+ "music.control": {
+  "type": "function",
+  "function": {
+   "name": "music.control",
+   "description": "[write] Tạm dừng/tiếp tục/chuyển bài/âm lượng",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "action": {
+      "type": "string",
+      "enum": [
+       "pause",
+       "resume",
+       "next",
+       "previous",
+       "volume"
+      ]
+     },
+     "volume": {
+      "type": "integer",
+      "description": "Số nguyên, không dấu chấm hay phẩy, ví dụ 2"
+     }
+    },
+    "required": [
+     "action"
+    ]
+   }
+  }
+ },
+ "music.add_to_playlist": {
+  "type": "function",
+  "function": {
+   "name": "music.add_to_playlist",
+   "description": "[write] Thêm bài vào playlist",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "track_id": {
+      "type": "string",
+      "description": "ID bài hát, lấy từ music.list_tracks",
+      "x-ref": "music.tracks"
+     },
+     "playlist_id": {
+      "type": "string",
+      "description": "ID playlist, lấy từ music.list_tracks",
+      "x-ref": "music.playlists"
+     }
+    },
+    "required": [
+     "track_id",
+     "playlist_id"
+    ]
+   }
+  }
+ },
+ "tv.guide": {
+  "type": "function",
+  "function": {
+   "name": "tv.guide",
+   "description": "[read] Danh sách kênh đang có và lịch phát sóng (gọi trước khi chuyển kênh) Trả về: programs[], channels[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "channel": {
+      "type": "string"
+     },
+     "date": {
+      "type": "string",
+      "description": "YYYY-MM-DD, ví dụ 2026-11-29"
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "tv.tune": {
+  "type": "function",
+  "function": {
+   "name": "tv.tune",
+   "description": "[write] Chuyển kênh (tự bật TV nếu đang tắt); kênh phải có trong channels của tv.guide",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "channel": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "channel"
+    ]
+   }
+  }
+ },
+ "tv.control": {
+  "type": "function",
+  "function": {
+   "name": "tv.control",
+   "description": "[write] Bật/tắt/âm lượng TV",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "action": {
+      "type": "string",
+      "enum": [
+       "on",
+       "off",
+       "volume",
+       "mute"
+      ]
+     },
+     "volume": {
+      "type": "integer",
+      "description": "Số nguyên, không dấu chấm hay phẩy, ví dụ 2"
+     }
+    },
+    "required": [
+     "action"
+    ]
+   }
+  }
+ },
+ "tv.record": {
+  "type": "function",
+  "function": {
+   "name": "tv.record",
+   "description": "[write] Đặt ghi hình chương trình",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "program_id": {
+      "type": "string",
+      "description": "ID chương trình, lấy từ tv.guide",
+      "x-ref": "tv.programs"
+     }
+    },
+    "required": [
+     "program_id"
+    ]
+   }
+  }
+ },
+ "podcast_radio.search": {
+  "type": "function",
+  "function": {
+   "name": "podcast_radio.search",
+   "description": "[read] Tìm kênh/tập podcast, radio; trả về kênh, các tập của kênh và đài radio khớp; query \"*\" liệt kê tất cả Trả về: shows[], episodes[], stations[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "type": "string",
+      "description": "Tên kênh, tên tập, chủ đề hoặc tên đài"
+     }
+    },
+    "required": [
+     "query"
+    ]
+   }
+  }
+ },
+ "podcast_radio.play": {
+  "type": "function",
+  "function": {
+   "name": "podcast_radio.play",
+   "description": "[write] Phát một tập podcast hoặc một kênh radio. Bắt buộc một trong: episode_id hoặc station",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "episode_id": {
+      "type": "string",
+      "description": "ID tập podcast, lấy từ podcast_radio.search",
+      "x-ref": "podcast_radio.episodes"
+     },
+     "station": {
+      "type": "string",
+      "description": "Tên hoặc tần số đài radio, ví dụ VOV Giao thông"
+     }
+    },
+    "required": [],
+    "x-one-of": [
+     [
+      "episode_id"
+     ],
+     [
+      "station"
+     ]
+    ]
+   }
+  }
+ },
+ "podcast_radio.subscribe": {
+  "type": "function",
+  "function": {
+   "name": "podcast_radio.subscribe",
+   "description": "[write] Theo dõi kênh",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "show_id": {
+      "type": "string",
+      "description": "ID kênh podcast, lấy từ podcast_radio.search",
+      "x-ref": "podcast_radio.shows"
+     }
+    },
+    "required": [
+     "show_id"
+    ]
+   }
+  }
+ },
+ "podcast_radio.queue": {
+  "type": "function",
+  "function": {
+   "name": "podcast_radio.queue",
+   "description": "[write] Thêm một tập podcast vào hàng đợi nghe sau",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "episode_id": {
+      "type": "string",
+      "description": "ID tập podcast, lấy từ podcast_radio.search",
+      "x-ref": "podcast_radio.episodes"
+     }
+    },
+    "required": [
+     "episode_id"
+    ]
+   }
+  }
+ },
+ "medication.list": {
+  "type": "function",
+  "function": {
+   "name": "medication.list",
+   "description": "[read] Lịch thuốc Trả về: schedules[]",
+   "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   }
+  }
+ },
+ "medication.add": {
+  "type": "function",
+  "function": {
+   "name": "medication.add",
+   "description": "[write] Thêm nhắc thuốc",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "x-match": "fuzzy"
+     },
+     "times": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "days": {
+      "type": "string",
+      "enum": [
+       "daily",
+       "weekdays"
+      ]
+     }
+    },
+    "required": [
+     "name",
+     "times"
+    ]
+   }
+  }
+ },
+ "medication.log_taken": {
+  "type": "function",
+  "function": {
+   "name": "medication.log_taken",
+   "description": "[write] Ghi đã uống",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "schedule_id": {
+      "type": "string",
+      "description": "ID lịch thuốc, lấy từ medication.list",
+      "x-ref": "medication.schedules"
+     },
+     "time": {
+      "type": "string",
+      "description": "ISO-8601 đầy đủ giây và offset múi giờ, ví dụ 2026-11-11T05:30:00+07:00"
+     }
+    },
+    "required": [
+     "schedule_id"
+    ]
+   }
+  }
+ },
+ "medication.remove": {
+  "type": "function",
+  "function": {
+   "name": "medication.remove",
+   "description": "[write] Xoá lịch thuốc",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "schedule_id": {
+      "type": "string",
+      "description": "ID lịch thuốc, lấy từ medication.list",
+      "x-ref": "medication.schedules"
+     }
+    },
+    "required": [
+     "schedule_id"
+    ]
+   }
+  }
+ },
+ "fitness.get_activity": {
+  "type": "function",
+  "function": {
+   "name": "fitness.get_activity",
+   "description": "[read] Số bước/calo theo ngày (bỏ trống: ngày gần nhất) Trả về: activity",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "date": {
+      "type": "string",
+      "description": "YYYY-MM-DD, ví dụ 2026-11-29",
+      "format": "date"
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "fitness.log_workout": {
+  "type": "function",
+  "function": {
+   "name": "fitness.log_workout",
+   "description": "[write] Ghi buổi tập",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "type": {
+      "type": "string",
+      "description": "Loại bài tập: walking đi bộ, running chạy bộ, cycling đạp xe, swimming bơi, yoga, gym tập tạ/thể hình, football đá bóng, badminton cầu lông, other loại khác",
+      "enum": [
+       "walking",
+       "running",
+       "cycling",
+       "swimming",
+       "yoga",
+       "gym",
+       "football",
+       "badminton",
+       "other"
+      ]
+     },
+     "minutes": {
+      "type": "integer",
+      "description": "Số nguyên, không dấu chấm hay phẩy, ví dụ 2",
+      "exclusiveMinimum": 0
+     },
+     "time": {
+      "type": "string",
+      "description": "ISO-8601 đầy đủ giây và offset múi giờ, ví dụ 2026-11-11T05:30:00+07:00; bỏ trống thì lấy current_time",
+      "format": "date-time"
+     }
+    },
+    "required": [
+     "type",
+     "minutes"
+    ]
+   }
+  }
+ },
+ "fitness.set_goal": {
+  "type": "function",
+  "function": {
+   "name": "fitness.set_goal",
+   "description": "[write] Đặt mục tiêu bước/ngày",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "steps": {
+      "type": "integer",
+      "description": "Số nguyên, không dấu chấm hay phẩy, ví dụ 2",
+      "exclusiveMinimum": 0
+     }
+    },
+    "required": [
+     "steps"
+    ]
+   }
+  }
+ },
+ "learning.list_courses": {
+  "type": "function",
+  "function": {
+   "name": "learning.list_courses",
+   "description": "[read] Khoá học đang theo và khoá học có thể đăng ký (enrolled) Trả về: courses[]",
+   "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   }
+  }
+ },
+ "learning.enroll": {
+  "type": "function",
+  "function": {
+   "name": "learning.enroll",
+   "description": "[write] Đăng ký theo học một khoá học",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "course_id": {
+      "type": "string",
+      "description": "ID khoá học, lấy từ learning.list_courses",
+      "x-ref": "learning.courses"
+     }
+    },
+    "required": [
+     "course_id"
+    ]
+   }
+  }
+ },
+ "learning.schedule_lesson": {
+  "type": "function",
+  "function": {
+   "name": "learning.schedule_lesson",
+   "description": "[write] Đặt buổi học",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "course_id": {
+      "type": "string",
+      "description": "ID khoá học, lấy từ learning.list_courses",
+      "x-ref": "learning.courses"
+     },
+     "time": {
+      "type": "string",
+      "description": "ISO-8601 đầy đủ giây và offset múi giờ, ví dụ 2026-11-11T05:30:00+07:00",
+      "format": "date-time"
+     }
+    },
+    "required": [
+     "course_id",
+     "time"
+    ]
+   }
+  }
+ },
+ "learning.log_progress": {
+  "type": "function",
+  "function": {
+   "name": "learning.log_progress",
+   "description": "[write] Ghi tiến độ",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "course_id": {
+      "type": "string",
+      "description": "ID khoá học, lấy từ learning.list_courses",
+      "x-ref": "learning.courses"
+     },
+     "minutes": {
+      "type": "integer",
+      "description": "Số nguyên, không dấu chấm hay phẩy, ví dụ 2",
+      "exclusiveMinimum": 0
+     }
+    },
+    "required": [
+     "course_id",
+     "minutes"
+    ]
+   }
+  }
+ },
+ "bike_rental.find_bikes": {
+  "type": "function",
+  "function": {
+   "name": "bike_rental.find_bikes",
+   "description": "[read] Xe đạp tại các trạm, lọc theo trạm/khu vực Trả về: bikes[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "near": {
+      "type": "string",
+      "description": "Tên trạm hoặc khu vực, ví dụ Hồ Gươm",
+      "x-match": "fuzzy"
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "bike_rental.reserve": {
+  "type": "function",
+  "function": {
+   "name": "bike_rental.reserve",
+   "description": "[write] Giữ/thuê một xe đạp còn trống",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "bike_id": {
+      "type": "string",
+      "description": "ID xe đạp, lấy từ bike_rental.find_bikes",
+      "x-ref": "bike_rental.bikes"
+     }
+    },
+    "required": [
+     "bike_id"
+    ]
+   }
+  }
+ },
+ "home_automation.list_rules": {
+  "type": "function",
+  "function": {
+   "name": "home_automation.list_rules",
+   "description": "[read] Danh sách quy tắc tự động Trả về: rules[]",
+   "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   }
+  }
+ },
+ "home_automation.create_rule": {
+  "type": "function",
+  "function": {
+   "name": "home_automation.create_rule",
+   "description": "[write] Tạo quy tắc bật/tắt một thiết bị vào giờ cố định mỗi ngày Trả về: rule",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "device_id": {
+      "type": "string",
+      "description": "ID thiết bị, lấy từ smart_home.get_status",
+      "x-ref": "smart_home.devices"
+     },
+     "action": {
+      "type": "string",
+      "enum": [
+       "on",
+       "off"
+      ]
+     },
+     "time": {
+      "type": "string",
+      "description": "Giờ chạy mỗi ngày dạng HH:MM, ví dụ 19:00",
+      "format": "time"
+     },
+     "title": {
+      "type": "string",
+      "x-match": "fuzzy"
+     }
+    },
+    "required": [
+     "device_id",
+     "action",
+     "time"
+    ]
+   }
+  }
+ },
+ "home_automation.delete_rule": {
+  "type": "function",
+  "function": {
+   "name": "home_automation.delete_rule",
+   "description": "[write] Xoá quy tắc",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "rule_id": {
+      "type": "string",
+      "description": "ID quy tắc, lấy từ home_automation.list_rules",
+      "x-ref": "home_automation.rules"
+     }
+    },
+    "required": [
+     "rule_id"
+    ]
+   }
+  }
+ },
+ "household_chores.list_chores": {
+  "type": "function",
+  "function": {
+   "name": "household_chores.list_chores",
+   "description": "[read] Danh sách việc nhà, người phụ trách và các thành viên (members) Trả về: chores[], members[]",
+   "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   }
+  }
+ },
+ "household_chores.assign": {
+  "type": "function",
+  "function": {
+   "name": "household_chores.assign",
+   "description": "[write] Giao một việc nhà cho một thành viên",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "chore_id": {
+      "type": "string",
+      "description": "ID việc nhà, lấy từ household_chores.list_chores",
+      "x-ref": "household_chores.chores"
+     },
+     "assignee": {
+      "type": "string",
+      "description": "Tên thành viên, đúng một tên trong members của household_chores.list_chores"
+     }
+    },
+    "required": [
+     "assignee",
+     "chore_id"
+    ]
+   }
+  }
+ },
+ "library.search": {
+  "type": "function",
+  "function": {
+   "name": "library.search",
+   "description": "[read] Tìm sách theo tên sách hoặc tác giả; không có query thì trả mọi sách Trả về: books[]",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "type": "string",
+      "description": "Tên sách hoặc tác giả"
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ "library.reserve": {
+  "type": "function",
+  "function": {
+   "name": "library.reserve",
+   "description": "[write] Đặt giữ một cuốn sách (sách đang có thì giữ tại quầy, đang cho mượn thì xếp hàng chờ)",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "book_id": {
+      "type": "string",
+      "description": "ID sách, lấy từ library.search",
+      "x-ref": "library.books"
+     }
+    },
+    "required": [
+     "book_id"
+    ]
+   }
+  }
+ },
+ "subscriptions.list": {
+  "type": "function",
+  "function": {
+   "name": "subscriptions.list",
+   "description": "[read] Danh sách gói đăng ký: tên, giá, ngày gia hạn tiếp theo, trạng thái Trả về: subscriptions[]",
+   "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   }
+  }
+ },
+ "subscriptions.cancel": {
+  "type": "function",
+  "function": {
+   "name": "subscriptions.cancel",
+   "description": "[write] Huỷ một gói đăng ký",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "subscription_id": {
+      "type": "string",
+      "description": "ID gói đăng ký, lấy từ subscriptions.list",
+      "x-ref": "subscriptions.subscriptions"
+     }
+    },
+    "required": [
+     "subscription_id"
+    ]
+   }
+  }
+ },
+ "sys.ask_missing_info": {
+  "type": "function",
+  "function": {
+   "name": "sys.ask_missing_info",
+   "description": "[meta] Báo các tham số bắt buộc còn thiếu của một tool",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "tool_name": {
+      "type": "string",
+      "description": "Tên tool bị thiếu tham số, dạng app_name.tool_name, ví dụ sms.send"
+     },
+     "params": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "Tên các tham số bắt buộc còn thiếu, đúng tên trong schema, ví dụ [\"contact_id\"]"
+     }
+    },
+    "required": [
+     "tool_name",
+     "params"
+    ]
+   }
+  }
+ }
+}

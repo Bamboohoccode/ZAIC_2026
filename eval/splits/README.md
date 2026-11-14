@@ -1,17 +1,19 @@
-# Chia tập Train / Dev theo App (eval/splits/)
+# Chia tập Train / Val (Dev) / Test theo App (eval/splits/)
 
-Tệp `dev_ids.txt` chứa danh sách 300 mẫu (19.4% tập train) được tách ra làm tập kiểm chứng cố định (held-out validation set) cho quá trình phát triển (A/B testing, GEPA prompt optimization).
+Tài liệu phân chia cố định 1,545 mẫu từ `data/train/train.jsonl` thành 3 tập không giao nhau (0% rò rỉ mẫu hay app lạ):
 
-## 1. Nguyên tắc thiết kế (Khái quát hoá sang App lạ)
-1. **Giữ lại 20% app lạ (9 / 46 app)**:
-   - Các app chỉ xuất hiện trong dev: `bike_rental`, `calculator`, `exchange_rate`, `fitness`, `lottery`, `package_tracking`, `fuel_price`, `gold_price`, `tv`.
-   - 100% mẫu gọi các app này được đưa vào `dev_ids.txt` (tổng 228 mẫu).
-   - Mô phỏng thực tế bảng `public_test` (có 11 app hoàn toàn mới so với train) để đánh giá khả năng zero-shot tool selection & parameter reasoning của Agent dựa vào schema trong `catalog.json`.
-2. **Cân bằng nhãn mục tiêu (Stratified ratio)**:
-   - Bổ sung 72 mẫu từ các app còn lại (và các mẫu không gọi app) để tỉ lệ tương đương toàn bộ tập train:
-     - `act`: 236 mẫu (78.67% vs train 78.77%)
-     - `ask` (`sys.ask_missing_info`): 42 mẫu (14.00% vs train 14.05%)
-     - `empty` (`[]` out-of-scope / hủy): 22 mẫu (7.33% vs train 7.18%)
-3. **Tính tái lập (Reproducibility)**:
-   - Được sinh tự động bằng script `make_dev_split.py` với `seed=42`.
-   - Chạy lại: `python eval/splits/make_dev_split.py`.
+| Tập | File | Số mẫu | App giữ riêng hoàn toàn | Phân bố `act` / `ask` / `empty` | Mục đích |
+|---|---|---|---|---|---|
+| **Val (Dev)** | `dev_ids.txt` | **300** (19.4%) | **9 app**: `bike_rental`, `calculator`, `exchange_rate`, `fitness`, `lottery`, `package_tracking`, `fuel_price`, `gold_price`, `tv` (228 mẫu) + 72 mẫu stratified | 236 / 42 / 22 (78.7% / 14.0% / 7.3%) | Kiểm chứng cố định trong quá trình GEPA & chọn checkpoint DPO |
+| **Test** | `test_ids.txt` | **100** (6.5%) | **3 app**: `library` (24), `home_energy` (27), `medication` (27) (tổng 78 mẫu) + 22 mẫu stratified | 79 / 14 / 7 (79.0% / 14.0% / 7.0%) | Đo tổng quát hóa sang app lạ sau khi chốt model DPO (mô phỏng public/private test) |
+| **DPO Train** | `dpo_train_ids.txt` | **1,145** (74.1%) | 34 app còn lại (0 mẫu chứa 9 app Dev hay 3 app Test) | 902 / 161 / 82 (78.8% / 14.1% / 7.2%) | Nguồn sinh dữ liệu cặp preference `(chosen, rejected)` cho DPO |
+
+## Tính tái lập (Reproducibility)
+- Sinh lại tập Val (`dev_ids.txt`, seed=42):
+  ```bash
+  python eval/splits/make_dev_split.py
+  ```
+- Sinh lại tập Test 100 mẫu (`test_ids.txt`) & DPO Train (`dpo_train_ids.txt`, seed=42):
+  ```bash
+  python eval/splits/make_test_split.py
+  ```

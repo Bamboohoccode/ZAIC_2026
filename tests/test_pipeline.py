@@ -17,6 +17,19 @@ def unit():
                        '<tool_call>{"name": "c.d", "arguments": "{\\"y\\": 2}"}</tool_call><tool_call>bad</tool_call>') == \
         [{"name": "a.b", "arguments": {"x": 1}}, {"name": "c.d", "arguments": {"y": 2}}]
 
+    # Think-block filtering (both full <think>...</think> and prompt-opened ... </think>) + Qwen3.5 XML fallback
+    assert parse_calls('<think>nháp <tool_call>{"name": "wrong.tool", "arguments": {}}</tool_call></think>\n'
+                       '<tool_call>{"name": "right.tool", "arguments": {"n": 2}}</tool_call>') == \
+        [{"name": "right.tool", "arguments": {"n": 2}}]
+    assert parse_calls('suy nghĩ với prompt mở sẵn think <tool_call>{"name": "skip.me", "arguments": {}}</tool_call>\n'
+                       '</think>\n\n<tool_call>\n<function=banking.transfer>\n'
+                       '<parameter=amount>\n50000\n</parameter>\n'
+                       '<parameter=confirm>\ntrue\n</parameter>\n'
+                       '<parameter=phone>\n0901234567\n</parameter>\n'
+                       '<parameter=tags>\n["a", "b"]\n</parameter>\n'
+                       '</function>\n</tool_call>') == \
+        [{"name": "banking.transfer", "arguments": {"amount": 50000, "confirm": True, "phone": "0901234567", "tags": ["a", "b"]}}]
+
     assert parse_verdict('{"verdict": "ACCEPT"}') == (True, "")
     assert parse_verdict('```json\n{"verdict": "REJECT", "reason": "thiếu date"}\n```') == (False, "thiếu date")
     assert parse_verdict("REJECT vì sai tool")[0] is False

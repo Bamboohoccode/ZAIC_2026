@@ -189,16 +189,37 @@ def build_messages(item, texts, keep):
     return [{"role": "system", "content": system}, *hist, {"role": "user", "content": texts[-1]}]
 
 
-def parse_calls(text):
+def _extract_calls_from_span(span):
     calls = []
-    for raw in re.findall(r"<tool_call>\s*(.*?)\s*</tool_call>", text, re.S):
+    for raw in re.findall(r"<tool_call>\s*(.*?)\s*</tool_call>", span, re.S):
         try:
             c = json.loads(raw)
             args = c.get("arguments") or {}
             calls.append({"name": c["name"], "arguments": json.loads(args) if isinstance(args, str) else args})
-        except (ValueError, KeyError, TypeError, AttributeError):
             continue
+        except (ValueError, KeyError, TypeError, AttributeError):
+            pass
+        # Qwen3.5 native XML tool_call fallback: <function=name><parameter=k>v</parameter></function>
+        fm = re.search(r"<function=([^>\s]+)>\s*(.*?)\s*</function>", raw, re.S)
+        if fm:
+            args = {}
+            for pm in re.finditer(r"<parameter=([^>\s]+)>\s*(.*?)\s*</parameter>", fm.group(2), re.S):
+                pval_raw = pm.group(2).strip()
+                try:
+                    pval = json.loads(pval_raw)
+                except ValueError:
+                    pval = pval_raw
+                args[pm.group(1).strip()] = pval
+            calls.append({"name": fm.group(1).strip(), "arguments": args})
     return calls
+
+
+def parse_calls(text):
+    cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.S)
+    if "</think>" in cleaned:
+        cleaned = cleaned.rsplit("</think>", 1)[-1]
+    calls = _extract_calls_from_span(cleaned)
+    return calls if calls or cleaned == text else _extract_calls_from_span(text)
 
 
 def parse_verdict(text):

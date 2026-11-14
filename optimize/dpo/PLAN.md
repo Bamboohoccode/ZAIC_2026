@@ -1,4 +1,4 @@
-# Kế Hoạch Triển Khai DPO Hai Giai Đoạn Cho `Ma7ee7/Qwen3.8_4B_Distilled` (`Task 2`)
+# Kế Hoạch Triển Khai DPO Hai Giai Đoạn Cho `empero-ai/Qwen3.8-4B-Distill` (`Task 2`)
 
 > Tài liệu kế hoạch chính thức được lưu trực tiếp trong repository (`optimize/dpo/PLAN.md`) để toàn bộ thành viên theo dõi, tái lập và chạy huấn luyện thống nhất.
 
@@ -6,7 +6,11 @@
 
 ## 1. Mục Tiêu & Bối Cảnh
 
-- **Bài toán (Task 2):** Bổ sung tri thức phân biệt tool đúng/sai, tham số bắt buộc/tùy chọn, trình tự đọc-trước-ghi và cổng chốt chặn mơ hồ (`sys.ask_missing_info`) cho model Planner **`Ma7ee7/Qwen3.8_4B_Distilled`** (Qwen 3.8 4B).
+- **Bài toán (Task 2):** Bổ sung tri thức phân biệt tool đúng/sai, tham số bắt buộc/tùy chọn, trình tự đọc-trước-ghi và cổng chốt chặn mơ hồ (`sys.ask_missing_info`) cho model Planner **`empero-ai/Qwen3.8-4B-Distill`** (Qwen 3.8 4B trên kiến trúc `Qwen3.5-4B` / `qwen3_5`).
+- **Đặc điểm kiến trúc & chat template của `empero-ai/Qwen3.8-4B-Distill`:**
+  - Kiến trúc lai Gated DeltaNet (`24` lớp `linear_attention` + `8` lớp `full_attention`, tổng `32` lớp). `AutoModelForCausalLM.from_pretrained` nạp `Qwen3_5ForCausalLM` phần text sạch sẽ; trên Colab GPU có thể cài thêm `flash-linear-attention` và `causal-conv1d` để tăng tốc `linear_attention` (nếu thiếu sẽ tự fallback sang PyTorch ops chuẩn).
+  - Prompt sau `apply_chat_template(..., add_generation_prompt=True)` kết thúc sẵn bằng `<|im_start|>assistant\n<think>\n`; `train_dpo.py` tự nhận diện `prompt_opens_think` để đóng `</think>\n\n` sau phần suy luận `BƯỚC 1/2/3` mà **không tạo thẻ `<think>` kép**.
+  - `lifemate/pipeline.py` (`parse_calls`) đã hỗ trợ lọc khối `<think>...</think>` (kể cả phần trước `</think>` khi `<think>` nằm ở prompt) và parse song song cả JSON `<tool_call>{"name": ..., "arguments": ...}</tool_call>` lẫn Qwen3.5 XML `<tool_call><function=...><parameter=...></parameter></function></tool_call>`.
 - **Vấn đề hiện tại:**
   - Prompt + Tool Schema đã rất dài (~5.9K–8.5K tokens, max ~9.4K tokens). Tiếp tục nhồi thêm quy tắc bằng chữ vào prompt dễ gây loãng chú ý và tăng chi phí suy luận (ràng buộc thi đấu BTC: A30 24GB, <= 30s/mẫu).
   - Trên tập `dev_ids.txt` (300 mẫu), `dev_v15` baseline ghi nhận các nhóm lỗi lớn nhất là `HASH_MISMATCH` (139/300 = 46.3%) và `WRONG_TOOL_OR_ARGS` (44/300 = 14.7%).
@@ -44,39 +48,39 @@ Sử dụng bộ dữ liệu đã được sinh và kiểm chứng `gold_hash_ve
 ```bash
 # Trên G4 96GB / A100 (bf16 LoRA thuần, không cần 4-bit)
 python -m lifemate.planner.train_dpo \
-  --model Ma7ee7/Qwen3.8_4B_Distilled \
+  --model empero-ai/Qwen3.8-4B-Distill \
   --train-data optimize/dpo/dataset/dpo_train.jsonl \
   --val-data optimize/dpo/dataset/dpo_val.jsonl \
   --out-dir checkpoints/planner_dpo_qwen38_lora \
-  --epochs 2.0 --lr 5e-6 --beta 0.1 --rank 16 \
+  --epochs 2.0 --lr 5e-6 --beta 0.1 --rank 16 --wrap-think \
   --max-prompt-length 9216 --max-length 10240 \
   --precompute-ref-log-probs --bs 2 --grad-accum 8  # dùng --bs 1 --grad-accum 16 nếu là A100 40GB
 
 # Trên L4 22.5GB (bắt buộc bật QLoRA 4-bit)
 python -m lifemate.planner.train_dpo \
-  --model Ma7ee7/Qwen3.8_4B_Distilled \
+  --model empero-ai/Qwen3.8-4B-Distill \
   --train-data optimize/dpo/dataset/dpo_train.jsonl \
   --val-data optimize/dpo/dataset/dpo_val.jsonl \
   --out-dir checkpoints/planner_dpo_qwen38_lora \
-  --epochs 2.0 --lr 5e-6 --beta 0.1 --rank 16 \
+  --epochs 2.0 --lr 5e-6 --beta 0.1 --rank 16 --wrap-think \
   --max-prompt-length 9216 --max-length 10240 \
   --load-in-4bit --precompute-ref-log-probs --bs 1 --grad-accum 16
 ```
 
-> **Lưu ý đặc thù về `<think>` của `Ma7ee7/Qwen3.8_4B_Distilled`:**
-> `chat_template.jinja` của `Ma7ee7/Qwen3.8_4B_Distilled` bỏ qua `enable_thinking=False` và tự động xuất khối `<think>...</think>` trước `<tool_call>`.
-> - Trong `dpo_train.jsonl` (Giai đoạn 1), cả `chosen` và `rejected` đều có cấu trúc đối xứng (`BƯỚC 1/2/3...`), không lệch thẻ `<think>`, hoặc có thể bật `--wrap-chosen-think` khi muốn bọc phần `BƯỚC 1/2/3` vào `<think>...</think>` đồng bộ cho cả `chosen` và `rejected`.
-> - Tránh tuyệt đối việc một bên có `<think>` còn bên kia không có `<think>`, vì DPO sẽ học lầm vào độ dài/sự tồn tại của `<think>` thay vì tri thức chọn tool.
+> **Lưu ý đặc thù về `<think>` của `empero-ai/Qwen3.8-4B-Distill`:**
+> `chat_template.jinja` của `empero-ai/Qwen3.8-4B-Distill` chèn sẵn `<think>\n` ở cuối `add_generation_prompt=True` (hoặc `<think>\n\n</think>\n\n` khi truyền `enable_thinking=False`).
+> - `train_dpo.py` tự kiểm tra `prompt_opens_think`: khi prompt đã mở `<think>\n`, cả `chosen` và `rejected` đều được đóng đối xứng bằng `</think>\n\n` sau phần `BƯỚC 1/2/3` trước `<tool_call>` (nên bật kèm `--wrap-think` để đồng bộ cả ở mọi chế độ).
+> - Tránh tuyệt đối việc một bên có `<think>`/`</think>` còn bên kia không có, vì DPO sẽ học lầm vào độ dài/sự tồn tại của `<think>` thay vì tri thức chọn tool.
 
 **Đo lường Trước vs Sau (Giai đoạn 1):**
 ```bash
 # 1. Baseline Qwen 3.8 4B trên Val (300) và Test (100)
-python -m lifemate.planner.runner --root data --split train --text --llm Ma7ee7/Qwen3.8_4B_Distilled --mapper none --gpu-mem 0.90 --max-ctx 12288 --verify-rounds 0 --prompt prompts/gepa/vuong/planner_v15.txt --ids eval/splits/dev_ids.txt --resume --out runs/dev_qwen38_base.jsonl
-python -m lifemate.planner.runner --root data --split train --text --llm Ma7ee7/Qwen3.8_4B_Distilled --mapper none --gpu-mem 0.90 --max-ctx 12288 --verify-rounds 0 --prompt prompts/gepa/vuong/planner_v15.txt --ids eval/splits/test_ids.txt --resume --out runs/test_qwen38_base.jsonl
+python -m lifemate.planner.runner --root data --split train --text --llm empero-ai/Qwen3.8-4B-Distill --mapper none --gpu-mem 0.90 --max-ctx 12288 --verify-rounds 0 --prompt prompts/gepa/vuong/planner_v15.txt --ids eval/splits/dev_ids.txt --resume --out runs/dev_qwen38_base.jsonl
+python -m lifemate.planner.runner --root data --split train --text --llm empero-ai/Qwen3.8-4B-Distill --mapper none --gpu-mem 0.90 --max-ctx 12288 --verify-rounds 0 --prompt prompts/gepa/vuong/planner_v15.txt --ids eval/splits/test_ids.txt --resume --out runs/test_qwen38_base.jsonl
 
 # 2. Sau DPO Giai đoạn 1
-python -m lifemate.planner.runner --root data --split train --text --llm Ma7ee7/Qwen3.8_4B_Distilled --llm-lora checkpoints/planner_dpo_qwen38_lora --mapper none --gpu-mem 0.90 --max-ctx 12288 --verify-rounds 0 --prompt prompts/gepa/vuong/planner_v15.txt --ids eval/splits/dev_ids.txt --resume --out runs/dev_qwen38_dpo_s1.jsonl
-python -m lifemate.planner.runner --root data --split train --text --llm Ma7ee7/Qwen3.8_4B_Distilled --llm-lora checkpoints/planner_dpo_qwen38_lora --mapper none --gpu-mem 0.90 --max-ctx 12288 --verify-rounds 0 --prompt prompts/gepa/vuong/planner_v15.txt --ids eval/splits/test_ids.txt --resume --out runs/test_qwen38_dpo_s1.jsonl
+python -m lifemate.planner.runner --root data --split train --text --llm empero-ai/Qwen3.8-4B-Distill --llm-lora checkpoints/planner_dpo_qwen38_lora --mapper none --gpu-mem 0.90 --max-ctx 12288 --verify-rounds 0 --prompt prompts/gepa/vuong/planner_v15.txt --ids eval/splits/dev_ids.txt --resume --out runs/dev_qwen38_dpo_s1.jsonl
+python -m lifemate.planner.runner --root data --split train --text --llm empero-ai/Qwen3.8-4B-Distill --llm-lora checkpoints/planner_dpo_qwen38_lora --mapper none --gpu-mem 0.90 --max-ctx 12288 --verify-rounds 0 --prompt prompts/gepa/vuong/planner_v15.txt --ids eval/splits/test_ids.txt --resume --out runs/test_qwen38_dpo_s1.jsonl
 
 # 3. Chấm điểm chia theo app (Val 300 & Test 100)
 python eval/scorer.py --sub runs/dev_qwen38_base.jsonl --compare runs/dev_qwen38_dpo_s1.jsonl --dev-ids eval/splits/dev_ids.txt --by-app
@@ -87,11 +91,11 @@ python eval/scorer.py --sub runs/test_qwen38_base.jsonl --compare runs/test_qwen
 
 ### Giai đoạn 2 (Fallback nếu Giai đoạn 1 chưa đạt kỳ vọng): On-Policy Rollout Sampling trên Colab
 **Điều kiện kích hoạt Giai đoạn 2:**
-- Điểm Mean Score trên `dev_ids.txt` (300 mẫu) sau Giai đoạn 1 tăng < `+0.0300` so với baseline `Ma7ee7/Qwen3.8_4B_Distilled`, HOẶC
-- Lỗi sinh format `<think>...</tool_call>` không ổn định do lệch phân phối off-policy giữa dữ liệu programmatic và thói quen sinh chuỗi `<think>` của `Ma7ee7/Qwen3.8_4B_Distilled`.
+- Điểm Mean Score trên `dev_ids.txt` (300 mẫu) sau Giai đoạn 1 tăng < `+0.0300` so với baseline `empero-ai/Qwen3.8-4B-Distill`, HOẶC
+- Lỗi sinh format `<think>...</tool_call>` không ổn định do lệch phân phối off-policy giữa dữ liệu programmatic và thói quen sinh chuỗi `<think>` của `empero-ai/Qwen3.8-4B-Distill`.
 
 **Cơ chế (`scripts/sample_onpolicy_dpo.py`):**
-1. Dùng `vLLM` tải trực tiếp `Ma7ee7/Qwen3.8_4B_Distilled` (hoặc kèm `--lora checkpoints/planner_dpo_qwen38_lora`) để sinh phản hồi trên `eval/splits/dpo_train_ids.txt` (1,145 mẫu): 1 rollout greedy (`temp=0.0`) + $K-1$ rollout ngẫu nhiên (`temp=0.7, top_p=0.9`).
+1. Dùng `vLLM` tải trực tiếp `empero-ai/Qwen3.8-4B-Distill` (hoặc kèm `--lora checkpoints/planner_dpo_qwen38_lora`) để sinh phản hồi trên `eval/splits/dpo_train_ids.txt` (1,145 mẫu): 1 rollout greedy (`temp=0.0`) + $K-1$ rollout ngẫu nhiên (`temp=0.7, top_p=0.9`).
 2. Replay song song bước gold qua `zaic_tools.ToolEnv` để có trạng thái & `gold_calls` chuẩn ở từng lượt.
 3. Đối chiếu từng rollout của chính model với `gold_calls` / `ToolEnv`:
    - Nếu model gọi đúng 100% tool & args ở bước đó: lưu làm ứng viên `chosen` tự nhiên (giữ nguyên `<think>...</think>` thật của model).

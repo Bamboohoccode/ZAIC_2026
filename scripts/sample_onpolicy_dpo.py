@@ -1,4 +1,4 @@
-"""Stage 2 DPO On-Policy Rollout Sampler for Ma7ee7/Qwen3.8_4B_Distilled.
+"""Stage 2 DPO On-Policy Rollout Sampler for empero-ai/Qwen3.8-4B-Distill.
 
 Use this script ONLY if Stage 1 programmatic DPO (optimize/dpo/dataset/dpo_train.jsonl)
 underperforms on eval/splits/dev_ids.txt. It runs the target Qwen model via vLLM on
@@ -6,9 +6,9 @@ eval/splits/dpo_train_ids.txt (1,145 training samples, zero leakage with Val/Tes
 executes rollouts against zaic_tools.ToolEnv, and pairs real model failure traces as
 `rejected` against ToolEnv-verified `chosen` completions.
 
-Usage (on Colab A100/H100/L4):
+Usage (on Colab G4/A100/L4):
   python -X utf8 scripts/sample_onpolicy_dpo.py --root data --split train \\
-      --ids eval/splits/dpo_train_ids.txt --model Ma7ee7/Qwen3.8_4B_Distilled --resume
+      --ids eval/splits/dpo_train_ids.txt --model empero-ai/Qwen3.8-4B-Distill --resume
 
 Dry-run check (no GPU / no vLLM required):
   python -X utf8 scripts/sample_onpolicy_dpo.py --dry-run
@@ -18,11 +18,14 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import os
 import re
 import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any
+
+DEFAULT_MODEL = os.environ.get("QWEN_MODEL_PATH", "empero-ai/Qwen3.8-4B-Distill")
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -253,7 +256,7 @@ def main() -> None:
     ap.add_argument("--split", default="train")
     ap.add_argument("--ids", type=Path, default=Path("eval/splits/dpo_train_ids.txt"))
     ap.add_argument("--prompt", type=Path, default=Path("prompts/gepa/vuong/planner_v15.txt"))
-    ap.add_argument("--model", default="Ma7ee7/Qwen3.8_4B_Distilled")
+    ap.add_argument("--model", default=DEFAULT_MODEL)
     ap.add_argument("--lora", default="", help="Optional Stage 1 LoRA adapter path to sample on-policy failures from")
     ap.add_argument("--out", type=Path, default=Path("optimize/dpo/dataset/dpo_onpolicy_train.jsonl"))
     ap.add_argument("--num-samples", type=int, default=3, help="Rollouts per turn (1 greedy + N-1 stochastic)")

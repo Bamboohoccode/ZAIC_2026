@@ -53,6 +53,13 @@ from lifemate.pipeline import (
 )
 
 
+def _strip_think_and_calls(text: str) -> str:
+    cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.S)
+    if "</think>" in cleaned:
+        cleaned = cleaned.rsplit("</think>", 1)[-1]
+    return re.sub(r"<tool_call>.*?</tool_call>", "", cleaned, flags=re.S).strip()
+
+
 def format_custom_messages(item, texts, keep, prompt_template):
     """Xây dựng chuỗi messages chuẩn với prompt tùy chỉnh của Planner (thay thế prompt mặc định)."""
     msgs = build_messages(item, texts, keep)
@@ -105,7 +112,7 @@ def plan_step(llm, msgs, tools, trace, rounds, deadline, system_prompt, max_ctx=
         if not calls or attempt == rounds or time.time() > deadline:
             return out, calls
         shown = "\n".join(f"<tool_call>{json.dumps(c, ensure_ascii=False)}</tool_call>" for c in calls)
-        verdict = llm.chat([safe_msgs + [{"role": "user", "content": VERIFY.format(query=query, calls=shown, text=re.sub(r"<tool_call>.*?</tool_call>", "", out, flags=re.S).strip())}]], tools)[0]
+        verdict = llm.chat([safe_msgs + [{"role": "user", "content": VERIFY.format(query=query, calls=shown, text=_strip_think_and_calls(out))}]], tools)[0]
         ok, reason = parse_verdict(verdict)
         trace.append({"verify": verdict})
         if ok:
@@ -132,7 +139,7 @@ def run_agent(env, llm, msgs, tools, catalog, trace, system_prompt, rounds=VERIF
                 log_msg(f"  [Step {step_i + 1}] No tool calls -> Agent finished.")
             return
         ai = len(msgs)
-        msgs.append(assistant_msg(re.sub(r"<tool_call>.*?</tool_call>", "", out, flags=re.S).strip(), calls))
+        msgs.append(assistant_msg(_strip_think_and_calls(out), calls))
         stop = False
         for c in calls:
             t_exec0 = time.time()

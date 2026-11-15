@@ -54,17 +54,51 @@ THINK_BLOCK_RE = re.compile(r"<think>.*?</think>\s*", re.S)
 
 
 def strip_think_block(text: str) -> str:
-    """Remove `<think>...</think>` blocks when aligned strip mode is requested."""
+    """Remove `<think>...</think>` (or dangling `...</think>`) blocks when aligned strip mode is requested."""
+    if "</think>" in text and "<think>" not in text:
+        return text.split("</think>", 1)[1].strip()
     return THINK_BLOCK_RE.sub("", text).strip()
 
 
-def align_think_format(text: str, think_mode: str) -> str:
-    """Apply consistent `<think>` formatting to both chosen and rejected strings."""
+def _split_think_and_tail(text: str) -> tuple[str, str, bool]:
+    """Extract `(think_body, payload_tail, has_closed_think)` handling both full `<think>` and vLLM continuations."""
+    raw = text.strip()
+    if "</think>" in raw:
+        head, tail = raw.split("</think>", 1)
+        think_body = re.sub(r"^\s*<think>\s*", "", head, count=1).strip()
+        return think_body, tail.strip(), True
+    wrapped = wrap_reasoning_in_think(raw, prompt_opens_think=False)
+    if "</think>" in wrapped:
+        head, tail = wrapped.split("</think>", 1)
+        think_body = re.sub(r"^\s*<think>\s*", "", head, count=1).strip()
+        return think_body, tail.strip(), False
+    return "", raw, False
+
+
+def align_pair_think(chosen_raw: str, rej_raw: str, think_mode: str) -> tuple[str, str]:
+    """Ensure symmetric `<think>` formatting between chosen and rejected completions.
+
+    In default `prefix` mode, both completions share the exact same `<think>` block so
+    log-probability differences cancel out on reasoning text and concentrate purely on `<tool_call>`.
+    """
+    chosen_think, chosen_tail, _ = _split_think_and_tail(chosen_raw)
+    rej_think, rej_tail, rej_closed = _split_think_and_tail(rej_raw)
+
     if think_mode == "strip":
-        return strip_think_block(text)
-    if think_mode == "prefix":
-        return wrap_reasoning_in_think(text)
-    return text.strip()
+        return (chosen_tail or strip_think_block(chosen_raw)), (rej_tail or strip_think_block(rej_raw))
+
+    if think_mode == "keep":
+        c_out = f"<think>\n{chosen_think}\n</think>\n\n{chosen_tail}" if chosen_think else chosen_raw.strip()
+        r_out = f"<think>\n{rej_think}\n</think>\n\n{rej_tail}" if rej_think else rej_raw.strip()
+        return c_out.strip(), r_out.strip()
+
+    shared_think = rej_think if (rej_closed and rej_think and rej_tail) else (chosen_think or rej_think)
+    if shared_think:
+        return (
+            f"<think>\n{shared_think}\n</think>\n\n{chosen_tail}".strip(),
+            f"<think>\n{shared_think}\n</think>\n\n{rej_tail}".strip(),
+        )
+    return chosen_tail or chosen_raw.strip(), rej_tail or rej_raw.strip()
 
 
 def trim_msgs_to_fit(
@@ -450,13 +484,12 @@ def main() -> None:
 
                 if failing:
                     raw_chosen = passing[0] if passing else task["fallback_chosen"]
-                    chosen_aligned = align_think_format(raw_chosen, args.think_mode)
                     written = 0
                     for rej_idx, (rej_raw, neg_cls, detail) in enumerate(failing):
                         if written >= args.max_pairs_per_step:
                             break
-                        rej_aligned = align_think_format(rej_raw, args.think_mode)
-                        if not rej_aligned or rej_aligned == chosen_aligned:
+                        chosen_aligned, rej_aligned = align_pair_think(raw_chosen, rej_raw, args.think_mode)
+                        if not chosen_aligned or not rej_aligned or rej_aligned == chosen_aligned:
                             continue
                         rec = {
                             "id": f"{task['sample_id']}_s{task['step']}_onpolicy_{rej_idx}",
@@ -482,8 +515,9 @@ def main() -> None:
                         if fb_list:
                             fb = dict(fb_list[0])
                             fb["prompt"] = task["msgs"]
-                            fb["chosen"] = align_think_format(fb["chosen"], args.think_mode)
-                            fb["rejected"] = align_think_format(fb["rejected"], args.think_mode)
+                            fb["chosen"], fb["rejected"] = align_pair_think(
+                                fb["chosen"], fb["rejected"], args.think_mode
+                            )
                             if fb["chosen"] and fb["rejected"] and fb["chosen"] != fb["rejected"]:
                                 fout.write(json.dumps(fb, ensure_ascii=False) + "\n")
                                 stats[fb.get("negative_class", "programmatic")] += 1

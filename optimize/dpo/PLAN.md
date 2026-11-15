@@ -32,17 +32,22 @@ Toàn bộ 1,545 mẫu từ `data/train/train.jsonl` được tách cố định
 
 ## 3. Chiến Lược DPO Hai Giai Đoạn (Two-Stage Pipeline)
 
-### Giai đoạn 1 (Chạy trước): Programmatic ToolEnv-Verified DPO
-Sử dụng bộ dữ liệu đã được sinh và kiểm chứng `gold_hash_verified=1144, gold_hash_failed=0` bằng `scripts/build_dpo_dataset.py`:
-- `optimize/dpo/dataset/dpo_train.jsonl`: **4,798 cặp** (1,087 mẫu train, 49.672 MB).
-- `optimize/dpo/dataset/dpo_val.jsonl`: **248 cặp** (57 mẫu nội bộ từ `dpo_train_ids.txt`, 2.53 MB).
-- `optimize/dpo/dataset/tool_specs_catalog.json`: Bảng JSON Schema 147 tools.
+### Giai đoạn 1 (Chạy trước): Programmatic ToolEnv-Verified DPO (v2 — Balanced & Symmetric CoT)
+Sử dụng bộ dữ liệu đã được sinh và kiểm chứng `gold_hash_verified=1144, gold_hash_failed=0` bằng `scripts/build_dpo_dataset.py` (loại bỏ `train_0066` trùng lặp nội bộ từ 1,145 IDs):
+- `optimize/dpo/dataset/dpo_train.jsonl`: **4,099 cặp** (1,087 mẫu train, **44.679 MB**).
+- `optimize/dpo/dataset/dpo_val.jsonl`: **203 cặp** (57 mẫu nội bộ từ `dpo_train_ids.txt`, **2.173 MB**).
+- Total: **4,302 cặp** (`tool_specs_catalog.json`: **0.082 MB**, Bảng JSON Schema 147 tools).
 - Phân bố 5 nhóm lỗi hard negative (`optimize/dpo/dataset/dpo_stats.json`):
-  - `ambiguity_gate_error`: **1,712** (Missed Ask chọn đại ID / False Ask trên write & read)
-  - `multi_action_or_scope_error`: **1,141** (Early stop bỏ sót nhánh/việc thứ 2, False Act trên `empty`/`no_app`)
-  - `confusable_tool`: **1,097** (Đánh tráo tool hay nhầm cùng nhóm/liên app)
-  - `hallucinated_optional_args`: **724** (Tự điền tham số tùy chọn hoặc làm biến dạng literal)
-  - `premature_write_or_ask`: **372** (Nhảy cóc gọi tool ghi hoặc hỏi sớm khi chưa gọi tool đọc)
+  - `multi_action_or_scope_error`: **1,776** (Early stop bỏ sót nhánh/việc thứ 2, False Act trên `empty`/`no_app`, và extra write distractor via `DISTRACTOR_WRITE_TOOLS`)
+  - `hallucinated_optional_args`: **1,023** (Tự điền tham số tùy chọn hoặc làm biến dạng literal)
+  - `ambiguity_gate_error`: **875** (Missed Ask chọn đại ID / False Ask trên write & read)
+  - `premature_write_or_ask`: **329** (Nhảy cóc gọi tool ghi hoặc hỏi sớm khi chưa gọi tool đọc)
+  - `confusable_tool`: **299** (Đánh tráo tool hay nhầm cùng nhóm/liên app — cân bằng `swap_balance` hai chiều)
+
+> **3 cải tiến cốt lõi ở Dataset & Trainer v2 (khắc phục lỗi v1):**
+> 1. **Shared byte-for-byte `<think>` prefix (`make_shared_think_prefix` + `align_pair_think`):** Cả `chosen` và `rejected` dùng chung nguyên văn phần `<think>...</think>` trung tính kiểu V15 3-step (hoặc cùng rollout prefix ở Stage 2), chỉ khác đúng khối `<tool_call>` quyết định — triệt tiêu hiện tượng DPO bão hòa loss theo độ dài/văn phong `BƯỚC 1/2/3`.
+> 2. **Cân bằng `confusable_tool` + thêm `spurious_extra_write`:** `gen_negative_confusable` đa bước dùng cơ chế `swap_balance` theo cặp tool (không dồn âm quá mức vào `banking.list_beneficiaries`, `banking.transfer`, `smart_home.switch_set`, `calendar.create_event`, `ride_hailing.get_quotes`), kết hợp âm bản gọi dư tool ghi (`DISTRACTOR_WRITE_TOOLS`).
+> 3. **Cân bằng `step>=1` & tách thư mục resume (`select_balanced_pairs` + run-scoped Drive resume):** Chọn tối đa `K=2` cặp/mẫu ưu tiên quay vòng lượt sau (`45.8%` `step>=1`: 937/2,046 cặp) và cân bằng `tool_net`, đồng thời `resolve_resume_checkpoint` khoanh vùng Drive fallback theo tên run (`planner_dpo_qwen38_v2_lora`) để không kéo nhầm `checkpoint-100` v1 cũ.
 
 **Lệnh huấn luyện Giai đoạn 1 (tối ưu tốc độ + nohup + lưu checkpoint & weight LoRA mỗi 10 step):**
 ```bash
@@ -51,78 +56,73 @@ nohup python -u -X utf8 -m lifemate.planner.train_dpo \
   --model empero-ai/Qwen3.8-4B-Distill \
   --train-data optimize/dpo/dataset/dpo_train.jsonl \
   --val-data optimize/dpo/dataset/dpo_val.jsonl \
-  --out-dir checkpoints/planner_dpo_qwen38_lora \
+  --out-dir checkpoints/planner_dpo_qwen38_v2_lora \
   --epochs 1.0 --lr 5e-6 --beta 0.1 --rank 16 --wrap-think \
   --max-pairs-per-sample 2 --max-prompt-length 9216 --max-length 10240 \
   --bs 2 --grad-accum 8 --save-steps 10 --eval-steps 50 --logging-steps 2 \
-  --auto-resume --drive-backup-dir /content/drive/MyDrive/ZAIC_2026_runs/checkpoints/planner_dpo_qwen38_lora \
-  > /content/drive/MyDrive/ZAIC_2026_runs/train_dpo_s1.log 2>&1 &
+  --auto-resume --drive-backup-dir /content/drive/MyDrive/ZAIC_2026_runs/checkpoints/planner_dpo_qwen38_v2_lora \
+  > /content/drive/MyDrive/ZAIC_2026_runs/train_dpo_s1_v2.log 2>&1 &
 
 # Trên L4 22.5GB (QLoRA 4-bit + TF32 + SDPA + --auto-resume + lưu weight mỗi 10 step)
 nohup python -u -X utf8 -m lifemate.planner.train_dpo \
   --model empero-ai/Qwen3.8-4B-Distill \
   --train-data optimize/dpo/dataset/dpo_train.jsonl \
   --val-data optimize/dpo/dataset/dpo_val.jsonl \
-  --out-dir checkpoints/planner_dpo_qwen38_lora \
+  --out-dir checkpoints/planner_dpo_qwen38_v2_lora \
   --epochs 1.0 --lr 5e-6 --beta 0.1 --rank 16 --wrap-think \
   --max-pairs-per-sample 2 --max-prompt-length 9216 --max-length 10240 \
   --load-in-4bit --bs 1 --grad-accum 16 --save-steps 10 --eval-steps 50 --logging-steps 2 \
-  --auto-resume --drive-backup-dir /content/drive/MyDrive/ZAIC_2026_runs/checkpoints/planner_dpo_qwen38_lora \
-  > /content/drive/MyDrive/ZAIC_2026_runs/train_dpo_s1.log 2>&1 &
+  --auto-resume --drive-backup-dir /content/drive/MyDrive/ZAIC_2026_runs/checkpoints/planner_dpo_qwen38_v2_lora \
+  > /content/drive/MyDrive/ZAIC_2026_runs/train_dpo_s1_v2.log 2>&1 &
 ```
 
 > **Bài học từ phiên Colab L4 >500 phút & ngắt kết nối giữa chừng (đã khắc phục triệt để):**
-> 1. **Chạy nền qua `nohup` + auto-reattach:** Cell 6B & 8B chạy `nohup` (detached session, ghi log thẳng vào Drive `/content/drive/MyDrive/ZAIC_2026_runs/train_dpo_s1.log`) kèm tail log trực tiếp. Nếu rớt mạng/mất kết nối tab trình duyệt mà VM vẫn sống, chạy lại cell sẽ tự gắn vào PID đang chạy mà không train lại từ đầu.
-> 2. **Lưu checkpoint + weight LoRA hoàn chỉnh mỗi 10 step (~8%):** Với 127 step (1 epoch trên 2,027 cặp), `--save-steps 10` xuất cả `checkpoint-<step>` lẫn weight LoRA dùng ngay (`adapter_config.json`, `adapter_model.safetensors`, `latest_checkpoint_info.json`) lên Google Drive sau mỗi 10 step; bật `--auto-resume` sẽ tự khôi phục từ checkpoint mới nhất trên Drive nếu Colab bị thu hồi VM.
-> 3. **Tắt `--precompute-ref-log-probs` & bật TF32/SDPA:** Trên PEFT LoRA, `DPOTrainer` tự tắt/bật adapter (`ref_model=None`) không tốn thêm VRAM và vào Step 1 ngay lập tức. Kết hợp `--max-pairs-per-sample 2 --epochs 1.0` (`4,798 -> 2,027` cặp phủ đủ 1,087 mẫu train & 5 nhóm lỗi) giảm thời gian L4 xuống ~45–60 phút (G4/A100 ~15–30 phút).
+> 1. **Chạy nền qua `nohup` + auto-reattach:** Cell 6B & 8B chạy `nohup` (detached session, ghi log thẳng vào Drive `/content/drive/MyDrive/ZAIC_2026_runs/train_dpo_s1_v2.log`) kèm tail log trực tiếp. Nếu rớt mạng/mất kết nối tab trình duyệt mà VM vẫn sống, chạy lại cell sẽ tự gắn vào PID đang chạy mà không train lại từ đầu.
+> 2. **Lưu checkpoint + weight LoRA hoàn chỉnh mỗi 10 step (~8%):** Với ~128 step (1 epoch trên 2,046 cặp đã cân bằng), `--save-steps 10` xuất cả `checkpoint-<step>` lẫn weight LoRA dùng ngay (`adapter_config.json`, `adapter_model.safetensors`, `latest_checkpoint_info.json`) lên Google Drive sau mỗi 10 step; bật `--auto-resume` sẽ tự khôi phục từ checkpoint mới nhất của cùng tên run trên Drive nếu Colab bị thu hồi VM.
+> 3. **Tắt `--precompute-ref-log-probs` & bật TF32/SDPA:** Trên PEFT LoRA, `DPOTrainer` tự tắt/bật adapter (`ref_model=None`) không tốn thêm VRAM và vào Step 1 ngay lập tức. Kết hợp `--max-pairs-per-sample 2 --epochs 1.0` (`4,099 -> 2,046` cặp phủ đủ 1,087 mẫu train, `45.8%` `step>=1` & 5 nhóm lỗi) giảm thời gian L4 xuống ~45–60 phút (G4/A100 ~15–30 phút).
 
 > **Lưu ý đặc thù về `<think>` của `empero-ai/Qwen3.8-4B-Distill`:**
 > `chat_template.jinja` của `empero-ai/Qwen3.8-4B-Distill` chèn sẵn `<think>\n` ở cuối `add_generation_prompt=True` (hoặc `<think>\n\n</think>\n\n` khi truyền `enable_thinking=False`).
-> - `train_dpo.py` tự kiểm tra `prompt_opens_think`: khi prompt đã mở `<think>\n`, cả `chosen` và `rejected` đều được đóng đối xứng bằng `</think>\n\n` sau phần `BƯỚC 1/2/3` trước `<tool_call>` (nên bật kèm `--wrap-think` để đồng bộ cả ở mọi chế độ).
-> - Tránh tuyệt đối việc một bên có `<think>`/`</think>` còn bên kia không có, vì DPO sẽ học lầm vào độ dài/sự tồn tại của `<think>` thay vì tri thức chọn tool.
+> - `train_dpo.py` tự kiểm tra `prompt_opens_think` và kết hợp với `make_shared_think_prefix` trong dataset v2: cả `chosen` và `rejected` đều mang **cùng một khối `<think>...</think>` giống hệt từng byte** trước `<tool_call>` (bật `--wrap-think` để đồng bộ ở mọi chế độ).
+> - Điều này đảm bảo tuyệt đối DPO chỉ tối ưu hóa quyết định `<tool_call>` chứ không học lầm vào độ dài hay văn phong `<think>`.
 
 **Baseline `empero-ai/Qwen3.8-4B-Distill` đã chạy xong & lưu sẵn trong repo (`optimize/dpo/baseline_runs/`):**
 - **Val (`dev_ids.txt`, N=300):** Mean Score = `0.3940` (`act=0.4149`, `ask=0.0778`, `empty=0.7727`; `held_out_val=0.3697`, `seen_train=0.2488`).
-- **Test (`test_ids.txt`, N=100):** Mean Score = `0.4394` (`act=0.4954`, `ask=0.0571`, `empty=0.5714`; `held_out_test=0.4804`, `seen_train=0.3007`).
-- Cell 6A của notebook tự khôi phục hai file baseline trên từ `optimize/dpo/baseline_runs/` (hoặc Google Drive) và bỏ qua bước chạy vLLM Baseline để dành toàn bộ GPU cho Train DPO.
+- **Test (`test_ids.txt`, N=100 — KHÓA TRONG LÚC TUNE):** Mean Score = `0.4394` (`act=0.4954`, `ask=0.0571`, `empty=0.5714`; `held_out_test=0.4804`, `seen_train=0.3007`). Trong suốt quá trình lặp chỉnh DPO, **chỉ đánh giá & tune trên Val (`dev_ids.txt`, N=300)**; mọi bước chạy/chấm `test_ids.txt` bị khóa sau `RUN_FINAL_TEST_EVAL = False` trong notebook để tránh rò rỉ (leak) tập Test.
+- Cell 6A của notebook tự khôi phục baseline từ `optimize/dpo/baseline_runs/` (hoặc Google Drive) và bỏ qua bước chạy vLLM Baseline để dành toàn bộ GPU cho Train DPO.
 
-**Trạng thái & Kiểm định `checkpoint-100` (Giai đoạn 1 — Step 100/127, ~78.9% Epoch 1):**
-- **Tiến độ & Dữ liệu:** `global_step = 100 / 127` (`epoch = 0.7893`, `21,430,799` tokens đã học, còn **27 step** nữa hoàn tất Epoch 1).
-- **Diễn biến Train Loss:** giảm đều và hội tụ sạch — Step 1 (`0.6931`) -> Step 10 (`0.5821`) -> Step 20 (`0.0988`) -> Step 50 (`0.0042`) -> Step 100 (`0.00125`).
-- **Held-out Validation (`dpo_val.jsonl`, 248 cặp):**
-  - Step 50: `eval_loss = 0.00673`, `eval_rewards/accuracies = 1.0`, `eval_rewards/margins = +7.422`, `eval_mean_token_accuracy = 0.6757`, `eval_entropy = 1.1091`.
-  - Step 100: `eval_loss = 0.00390`, `eval_rewards/accuracies = 1.0`, `eval_rewards/margins = +8.023`, `eval_mean_token_accuracy = 0.6787`, `eval_entropy = 1.1101` (entropy giữ nguyên ổn định so với Step 1 `1.1103`, không có dấu hiệu collapse).
-- **Tính toàn vẹn trọng số & trạng thái trainer:** `adapter_model.safetensors` (`128/128` nhánh `lora_B` khác 0, `0` NaN/Inf), `optimizer.pt` (256 tensor states), `scheduler.pt` (`last_epoch: 100`), và `training_args.bin` (`bf16=True`, `per_device_train_batch_size=1`, `gradient_accumulation_steps=16`, `learning_rate=5e-6`, `save_steps=10`, `eval_steps=50`) đều đầy đủ & hợp lệ.
-- **Cách chạy tiếp nốt 27 step (Step 101 -> 127) trên Google Colab:**
-  - Để thư mục `checkpoint-100` trên Google Drive (`/content/drive/MyDrive/ZAIC_2026_runs/checkpoints/planner_dpo_qwen38_lora/checkpoint-100`, hoặc đặt tại `/content/drive/MyDrive/ZAIC_2026_runs/` / `/content/drive/MyDrive/` kể cả thư mục tải về dạng `checkpoint-100-*/checkpoint-100`).
-  - Mở `notebooks/colab_train_dpo_qwen38_4b.ipynb` và chạy **Cell 6B**: `--auto-resume` sẽ tự động tìm `checkpoint-100`, làm phẳng nếu lồng thư mục, đồng bộ `train_batch_size=1, grad_accum=16` (kể cả khi đổi sang G4/A100) và tiếp tục train từ Step 100 -> 127 (nếu thiếu `optimizer.pt`, script tự fallback sang `--resume-from-lora`). Cell 7 & Cell 9 cũng tự trích xuất adapter từ `checkpoint-*` cao nhất nếu chưa có file ở thư mục gốc.
+**Phân tích kết quả v1 (`checkpoint-100`) & lý do chuyển sang v2 (Strict Val-only Tuning):**
+- **Kết quả run v1 (`checkpoints/planner_dpo_qwen38_lora/checkpoint-100`):** Test N=100 tăng `0.4394 -> 0.4877 (+0.0483)`, nhưng **Val N=300 giảm nhẹ `0.3940 -> 0.3888 (-0.0052)`** (lỗi `HASH_MISMATCH` tăng `122 -> 131`) chủ yếu do `banking` tụt `0.2165 -> 0.0520 (-0.1645)`, kéo theo sụt điểm trên các mẫu `gold_price` (`15/33` mẫu dùng chung `banking`) và `exchange_rate` (`3/25` mẫu) trong `dev_ids.txt`.
+- **Nguyên nhân gốc đã kiểm chứng trên code & dữ liệu v1:**
+  1. `select_balanced_pairs(..., 2)` trước đây chọn **100% `step=0` và 0% `step>=1`** (`2,027` cặp), nên model mất phản xạ nối bước sau kết quả tra cứu đầu tiên.
+  2. `gen_negative_confusable` trước đây thiên lệch đánh tráo âm nặng vào một số tool (`banking.list_beneficiaries` net `-106`, `smart_home.switch_set` `-59`, `calendar.create_event` `-40`, `ride_hailing.get_quotes` `-33`, `banking.transfer` `-27`), khiến model né gọi `banking`.
+  3. Chênh lệch độ dài `chosen` (~400 ký tự `BƯỚC 1/2/3`) vs `rejected` (~100 ký tự) làm DPO loss bão hòa sớm (`0.0012`) theo văn phong `<think>` thay vì học chọn `<tool_call>`.
+- **Cách chạy v2 sạch (`checkpoints/planner_dpo_qwen38_v2_lora`):** Notebook Cell 6B mặc định train run v2 hoàn toàn mới từ dữ liệu v2 đã cân bằng (Drive auto-resume tự khoanh vùng theo `planner_dpo_qwen38_v2_lora`, không lẫn `checkpoint-100` v1) và Cell 7 chấm điểm riêng lên `runs/dev_qwen38_dpo_s1_v2.jsonl` (chỉ trên `dev_ids.txt`).
 
-**Đo lường Sau DPO (Giai đoạn 1):**
+**Đo lường Sau DPO (Giai đoạn 1 — Chỉ chấm Val trong lúc tune):**
 ```bash
-# 1. Sau DPO Giai đoạn 1 (Baseline đã có sẵn ở optimize/dpo/baseline_runs/)
-python -m lifemate.planner.runner --root data --split train --text --llm empero-ai/Qwen3.8-4B-Distill --llm-lora checkpoints/planner_dpo_qwen38_lora --mapper none --gpu-mem 0.90 --max-ctx 12288 --verify-rounds 0 --prompt prompts/gepa/vuong/planner_v15.txt --ids eval/splits/dev_ids.txt --resume --out runs/dev_qwen38_dpo_s1.jsonl
-python -m lifemate.planner.runner --root data --split train --text --llm empero-ai/Qwen3.8-4B-Distill --llm-lora checkpoints/planner_dpo_qwen38_lora --mapper none --gpu-mem 0.90 --max-ctx 12288 --verify-rounds 0 --prompt prompts/gepa/vuong/planner_v15.txt --ids eval/splits/test_ids.txt --resume --out runs/test_qwen38_dpo_s1.jsonl
+# 1. Sau DPO Giai đoạn 1 v2 (chỉ chạy & chấm Val N=300; test_ids.txt giữ nguyên ở RUN_FINAL_TEST_EVAL = False)
+python -m lifemate.planner.runner --root data --split train --text --llm empero-ai/Qwen3.8-4B-Distill --llm-lora checkpoints/planner_dpo_qwen38_v2_lora --mapper none --gpu-mem 0.90 --max-ctx 12288 --verify-rounds 0 --prompt prompts/gepa/vuong/planner_v15.txt --ids eval/splits/dev_ids.txt --resume --out runs/dev_qwen38_dpo_s1_v2.jsonl
 
-# 2. Chấm điểm chia theo app (Val 300 & Test 100)
-python eval/scorer.py --sub optimize/dpo/baseline_runs/dev_qwen38_base.jsonl --compare runs/dev_qwen38_dpo_s1.jsonl --dev-ids eval/splits/dev_ids.txt --by-app
-python eval/scorer.py --sub optimize/dpo/baseline_runs/test_qwen38_base.jsonl --compare runs/test_qwen38_dpo_s1.jsonl --dev-ids eval/splits/test_ids.txt --by-app
+# 2. Chấm điểm chia theo app trên Val 300 (Trước vs Sau)
+python eval/scorer.py --sub optimize/dpo/baseline_runs/dev_qwen38_base.jsonl --compare runs/dev_qwen38_dpo_s1_v2.jsonl --dev-ids eval/splits/dev_ids.txt --by-app
 ```
 
 ---
 
-### Giai đoạn 2 (Fallback nếu Giai đoạn 1 chưa đạt kỳ vọng): On-Policy Rollout Sampling trên Colab
-**Điều kiện kích hoạt Giai đoạn 2:**
+### Giai đoạn 2 (Chỉ chạy nếu Val 300 chưa đạt ngưỡng sau Giai đoạn 1 v2): On-Policy Self-Play DPO
+**Điều kiện kích hoạt (chỉ dựa trên Val `dev_ids.txt`):**
 - Điểm Mean Score trên `dev_ids.txt` (300 mẫu) sau Giai đoạn 1 tăng < `+0.0300` so với baseline `empero-ai/Qwen3.8-4B-Distill`, HOẶC
 - Lỗi sinh format `<think>...</tool_call>` không ổn định do lệch phân phối off-policy giữa dữ liệu programmatic và thói quen sinh chuỗi `<think>` của `empero-ai/Qwen3.8-4B-Distill`.
 
 **Cơ chế (`scripts/sample_onpolicy_dpo.py`):**
-1. Dùng `vLLM` tải trực tiếp `empero-ai/Qwen3.8-4B-Distill` (hoặc kèm `--lora checkpoints/planner_dpo_qwen38_lora`) để sinh phản hồi trên `eval/splits/dpo_train_ids.txt` (1,145 mẫu): 1 rollout greedy (`temp=0.0`) + $K-1$ rollout ngẫu nhiên (`temp=0.7, top_p=0.9`).
+1. Dùng `vLLM` tải trực tiếp `empero-ai/Qwen3.8-4B-Distill` (hoặc kèm `--lora checkpoints/planner_dpo_qwen38_v2_lora`) để sinh phản hồi trên `eval/splits/dpo_train_ids.txt` (1,145 mẫu): 1 rollout greedy (`temp=0.0`) + $K-1$ rollout ngẫu nhiên (`temp=0.7, top_p=0.9`).
 2. Replay song song bước gold qua `zaic_tools.ToolEnv` để có trạng thái & `gold_calls` chuẩn ở từng lượt.
 3. Đối chiếu từng rollout của chính model với `gold_calls` / `ToolEnv`:
    - Nếu model gọi đúng 100% tool & args ở bước đó: lưu làm ứng viên `chosen` tự nhiên (giữ nguyên `<think>...</think>` thật của model).
    - Nếu model gọi sai (`confusable_tool`, thiếu/thừa tham số, `FALSE_ACT`, `MISSED_ASK`, `FALSE_ASK`, sai cú pháp): ghép làm **`rejected` on-policy** đối xứng với **`chosen` đã xác thực qua `ToolEnv`**.
-   - Căn chỉnh thẻ `<think>` giữa `chosen` và `rejected` theo `--think-mode prefix|strip|keep` (mặc định `prefix`) để đảm bảo cả 2 nhánh đối xứng về format `<think>`.
-4. Huấn luyện tiếp DPO (LR nhỏ `2e-6`, `1.0` epoch) trên `optimize/dpo/dataset/dpo_onpolicy_train.jsonl` và đánh giá lại trên `dev_ids.txt` + `test_ids.txt`.
+   - Căn chỉnh thẻ `<think>` qua `align_pair_think` theo `--think-mode prefix|strip|keep` (mặc định `prefix`) để hai nhánh dùng chung **cùng một khối `<think>...</think>` nguyên văn** (kể cả kiểu rollout chỉ kết thúc bằng `</think>`), đảm bảo 100% đối xứng.
+4. Huấn luyện tiếp DPO (LR nhỏ `2e-6`, `1.0` epoch) trên `optimize/dpo/dataset/dpo_onpolicy_train.jsonl` và đánh giá lại trên `dev_ids.txt` (chỉ mở khóa `test_ids.txt` qua `RUN_FINAL_TEST_EVAL = True` khi chốt mô hình cuối cùng).
 
 ---
 

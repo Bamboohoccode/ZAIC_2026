@@ -173,43 +173,114 @@ def log_info(msg: str) -> None:
     print(f"[{ts}] {msg}", flush=True)
 
 
+_TOOL_NAME_RE = re.compile(r'"name"\s*:\s*"([^"]+)"')
+
+
+def _row_tools(text: str) -> set[str]:
+    return set(_TOOL_NAME_RE.findall(text or ""))
+
+
 def select_balanced_pairs(rows: list[dict[str, Any]], max_per_sample: int) -> list[dict[str, Any]]:
-    """Keep up to `max_per_sample` pairs per sample_id, balanced round-robin across negative_class."""
+    """Keep up to `max_per_sample` pairs per sample_id, covering both step=0 and step>=1 turns.
+
+    Multi-turn samples select from the latest execution/ask step (`max(steps)`) alongside step=0
+    (and include the second-latest post-read step on 3+ step trajectories), while balancing both
+    `negative_class` and net `in_chosen - in_rejected` tool occurrences across selected rows.
+    """
     if max_per_sample <= 0:
         return rows
+
     sample_order: list[str] = []
-    by_sample: dict[str, dict[str, list[dict[str, Any]]]] = {}
-    for row in rows:
+    by_sample: dict[str, dict[int, list[tuple[int, dict[str, Any]]]]] = {}
+    for row_idx, row in enumerate(rows):
         sid = str(row.get("sample_id", ""))
-        neg = str(row.get("negative_class", "unknown"))
+        step = int(row.get("step", 0))
         if sid not in by_sample:
             sample_order.append(sid)
             by_sample[sid] = defaultdict(list)
-        by_sample[sid][neg].append(row)
+        by_sample[sid][step].append((row_idx, row))
 
+    class_counts: Counter[str] = Counter()
+    step_counts: Counter[int] = Counter()
+    tool_net: Counter[str] = Counter()
     selected: list[dict[str, Any]] = []
+
+    def _pick_from_step(
+        pool: list[tuple[int, dict[str, Any]]],
+        picked_ids: set[int],
+        picked_classes: set[str],
+    ) -> dict[str, Any] | None:
+        avail = [(idx, r) for idx, r in pool if idx not in picked_ids]
+        if not avail:
+            return None
+
+        def _score(item: tuple[int, dict[str, Any]]) -> tuple[int, int, int, int]:
+            idx, r = item
+            neg = str(r.get("negative_class", "unknown"))
+            c_tools = _row_tools(r.get("chosen", ""))
+            r_tools = _row_tools(r.get("rejected", ""))
+            penalty = sum(1 for t in (r_tools - c_tools) if tool_net[t] <= 1) - sum(
+                1 for t in (c_tools - r_tools) if tool_net[t] <= 0
+            )
+            return (penalty, 1 if neg in picked_classes else 0, class_counts[neg], idx)
+
+        best_idx, best_row = min(avail, key=_score)
+        picked_ids.add(best_idx)
+        neg = str(best_row.get("negative_class", "unknown"))
+        picked_classes.add(neg)
+        class_counts[neg] += 1
+        step_counts[int(best_row.get("step", 0))] += 1
+        c_tools = _row_tools(best_row.get("chosen", ""))
+        r_tools = _row_tools(best_row.get("rejected", ""))
+        for t in c_tools - r_tools:
+            tool_net[t] += 1
+        for t in r_tools - c_tools:
+            tool_net[t] -= 1
+        return best_row
+
     for sid in sample_order:
-        buckets = list(by_sample[sid].values())
-        picked: list[dict[str, Any]] = []
-        idx = 0
-        while len(picked) < max_per_sample:
-            progressed = False
-            for bucket in buckets:
-                if idx < len(bucket) and len(picked) < max_per_sample:
-                    picked.append(bucket[idx])
-                    progressed = True
-            if not progressed:
-                break
-            idx += 1
-        selected.extend(picked)
+        step_map = by_sample[sid]
+        steps = sorted(step_map.keys())
+        # Prioritize post-read execution/ask steps + step=0 read turn
+        if len(steps) >= 3:
+            step_cycle = [steps[-1], steps[-2], steps[0], *steps[1:-2]]
+        elif len(steps) == 2:
+            step_cycle = [steps[-1], steps[0]]
+        else:
+            step_cycle = list(steps)
+
+        picked_rows: list[dict[str, Any]] = []
+        picked_ids: set[int] = set()
+        picked_classes: set[str] = set()
+        turn_cursor = 0
+        stalls = 0
+        while len(picked_rows) < max_per_sample and stalls < len(step_cycle):
+            s = step_cycle[turn_cursor % len(step_cycle)]
+            turn_cursor += 1
+            chosen_row = _pick_from_step(step_map[s], picked_ids, picked_classes)
+            if chosen_row is not None:
+                picked_rows.append(chosen_row)
+                stalls = 0
+            else:
+                stalls += 1
+        selected.extend(picked_rows)
+
+    n_step0 = step_counts[0]
+    n_step1p = sum(cnt for st, cnt in step_counts.items() if st >= 1)
+    log_info(
+        f"Balanced step+class selection (K={max_per_sample}): "
+        f"{len(selected)}/{len(rows)} pairs | step=0: {n_step0}, step>=1: {n_step1p} | "
+        f"classes={dict(class_counts)}"
+    )
     return selected
 
 
-DEFAULT_DRIVE_RESUME_DIRS = (
+LEGACY_DRIVE_RESUME_DIRS = (
     "/content/drive/MyDrive/ZAIC_2026_runs/checkpoints/planner_dpo_qwen38_lora",
     "/content/drive/MyDrive/ZAIC_2026_runs",
     "/content/drive/MyDrive",
 )
+DEFAULT_DRIVE_RESUME_DIRS = LEGACY_DRIVE_RESUME_DIRS
 
 
 def _is_valid_ckpt_dir(p: Path) -> int | None:
@@ -366,7 +437,15 @@ def resolve_resume_checkpoint(
     search_dirs: list[Path] = []
     if drive_backup_dir:
         search_dirs.append(Path(drive_backup_dir))
-    for d in extra_search_dirs:
+    active_run_name = Path(drive_backup_dir).name if drive_backup_dir else out_dir.name
+    effective_extras = extra_search_dirs
+    if extra_search_dirs == DEFAULT_DRIVE_RESUME_DIRS and active_run_name != "planner_dpo_qwen38_lora":
+        # Scope automatic fallback to the active run directory so fresh v2/s2 runs never resume legacy v1 checkpoints
+        effective_extras = (
+            f"/content/drive/MyDrive/ZAIC_2026_runs/checkpoints/{active_run_name}",
+            f"/content/drive/MyDrive/{active_run_name}",
+        )
+    for d in effective_extras:
         p = Path(d)
         if p.exists():
             search_dirs.append(p)

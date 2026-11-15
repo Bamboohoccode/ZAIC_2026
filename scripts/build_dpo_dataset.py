@@ -417,6 +417,13 @@ def format_tool_calls(calls: list[dict[str, Any]]) -> str:
     return "\n".join(call_tag(c) for c in calls)
 
 
+CALL_NAME_RE = re.compile(r'"name"\s*:\s*"([^"]+)"')
+
+
+def _extract_call_names(text: str) -> set[str]:
+    return set(CALL_NAME_RE.findall(text))
+
+
 def sample_apps(calls: list[dict[str, Any]]) -> list[str]:
     apps = []
     for c in calls:
@@ -496,6 +503,42 @@ def describe_minimal_args(calls: list[dict[str, Any]], catalog: dict[str, Any]) 
     return "; ".join(parts)
 
 
+def make_shared_think_prefix(
+    calls: list[dict[str, Any]],
+    step_idx: int,
+    total_steps: int,
+    intent: str,
+    catalog: dict[str, Any],
+    no_app_dropped: list[str] | None = None,
+) -> str:
+    """Create a neutral V15 3-step reasoning prefix shared verbatim by both chosen and rejected.
+
+    Using the exact same `<think>` block on both sides cancels out log-prob differences on
+    reasoning prose and concentrates 100% of DPO gradients onto tool/arg decisions.
+    """
+    if no_app_dropped is not None:
+        return (
+            "BƯỚC 1. KIỂM TRA PHẠM VI: Đối chiếu ứng dụng cần dùng với danh sách installed_apps hiện có trên thiết bị.\n"
+            "BƯỚC 2. XÁC ĐỊNH HÀNH ĐỘNG: Quyết định từ chối ngoài phạm vi hay gọi tool trong installed_apps."
+        )
+    if not calls:
+        return (
+            "BƯỚC 1. KIỂM TRA PHẠM VI: Xác định xem yêu cầu có cần gọi tool trên thiết bị hay chỉ là hội thoại/tự huỷ.\n"
+            "BƯỚC 2. XÁC ĐỊNH HÀNH ĐỘNG: Quyết định trả lời trực tiếp không gọi tool hay phát sinh tool call."
+        )
+    if intent == "ask" or any(c["name"] == "sys.ask_missing_info" for c in calls):
+        return (
+            f"BƯỚC 1. KIỂM TRA PHẠM VI & MƠ HỒ (Lượt {step_idx + 1}/{total_steps}): Kiểm tra tham số bắt buộc và độ rõ ràng của đối tượng thao tác từ hội thoại và tool_result.\n"
+            "BƯỚC 2. XÁC ĐỊNH ĐÍCH: Nếu thiếu hoặc mơ hồ giữa nhiều ứng viên -> gọi `sys.ask_missing_info` trỏ đúng tool ghi; chỉ thực thi khi đã đủ thông tin.\n"
+            "BƯỚC 3. CÚ PHÁP: Xuất kết quả chuẩn JSON `<tool_call>` hoặc giữ nguyên giá trị gốc."
+        )
+    return (
+        f"BƯỚC 1. KIỂM TRA PHẠM VI & MƠ HỒ (Lượt {step_idx + 1}/{total_steps}): Đối chiếu yêu cầu với installed_apps; xác minh đã đủ ID/xác nhận hay cần đọc trước.\n"
+        "BƯỚC 2. CHỌN TOOL & ĐẦY ĐỦ HÀNH ĐỘNG: Phân biệt chính xác tên tool theo mục đích app đã cài, gọi đủ tác vụ được yêu cầu và không chèn tool dư thừa.\n"
+        "BƯỚC 3. THAM SỐ TỐI THIỂU & NGUYÊN VĂN: Chỉ truyền tham số cần thiết (bắt buộc + người dùng nêu rõ), bỏ qua tuỳ chọn dư thừa và giữ nguyên tên riêng, số liệu gốc."
+    )
+
+
 def make_chosen_response(
     calls: list[dict[str, Any]],
     step_idx: int,
@@ -504,49 +547,14 @@ def make_chosen_response(
     catalog: dict[str, Any],
     no_app_dropped: list[str] | None = None,
 ) -> str:
+    think_prefix = make_shared_think_prefix(
+        calls, step_idx, total_steps, intent, catalog, no_app_dropped=no_app_dropped
+    )
     if no_app_dropped is not None:
-        return (
-            f"BƯỚC 1. KIỂM TRA PHẠM VI: App xử lý yêu cầu ({', '.join(no_app_dropped)}) KHÔNG CÓ trong danh sách installed_apps. "
-            "Yêu cầu ngoài phạm vi đã cài -> TUYỆT ĐỐI KHÔNG gọi tool nào (kể cả tool đọc hay sys.ask_missing_info).\n"
-            "BƯỚC 2. HÀNH ĐỘNG: Dừng ngay và trả lời ngắn gọn.\n"
-            "Xin lỗi, thiết bị hiện chưa cài đặt ứng dụng phù hợp để thực hiện yêu cầu này."
-        )
+        return f"{think_prefix}\nXin lỗi, thiết bị hiện chưa cài đặt ứng dụng phù hợp để thực hiện yêu cầu này."
     if not calls:
-        return (
-            "BƯỚC 1. KIỂM TRA PHẠM VI: Yêu cầu là trò chuyện/tự huỷ, ngoài phạm vi app đã cài, hoặc điều kiện kiểm tra trong lịch sử không thoả -> TUYỆT ĐỐI KHÔNG gọi tool nào.\n"
-            "BƯỚC 2. HÀNH ĐỘNG: Không gọi tool và trả lời ngắn gọn.\n"
-            "Đã rõ, tôi sẽ không thực hiện thao tác thay đổi nào thêm."
-        )
-
-    if any(c["name"] == "sys.ask_missing_info" for c in calls):
-        ask_c = next(c for c in calls if c["name"] == "sys.ask_missing_info")
-        tn = (ask_c.get("arguments") or {}).get("tool_name", "")
-        ps = (ask_c.get("arguments") or {}).get("params", [])
-        step_note = "Sau khi đã gọi tool đọc tra cứu" if step_idx > 0 else "Dữ liệu người dùng chưa cung cấp đủ tham số bắt buộc phi-ID"
-        cot = (
-            f"BƯỚC 1. KIỂM TRA PHẠM VI & MƠ HỒ: {step_note}, tham số {ps} cho tool ghi `{tn}` bị thiếu hoặc mơ hồ (>=2 lựa chọn không phân biệt được). "
-            "CẤM tự đoán hay tự bịa giá trị -> bắt buộc gọi `sys.ask_missing_info`.\n"
-            f"BƯỚC 2. XÁC ĐỊNH ĐÍCH: Trỏ `tool_name` đúng vào tool ghi `{tn}` (không trỏ tool đọc), liệt kê đúng `params={ps}`.\n"
-            f"BƯỚC 3. CÚ PHÁP: Xuất tool call hỏi lại người dùng."
-        )
-        return f"{cot}\n{format_tool_calls(calls)}"
-
-    kinds = [catalog[c["name"]]["kind"] for c in calls]
-    names = [c["name"] for c in calls]
-    conf_notes = []
-    for n in names:
-        if n in CONFUSABLE_TOOLS:
-            conf_notes.append(CONFUSABLE_TOOLS[n][0][1])
-    conf_str = " ".join(dict.fromkeys(conf_notes)) if conf_notes else "Chọn đúng tool khớp hoàn toàn mục đích và miền ứng dụng đã cài."
-
-    if all(k == "read" for k in kinds):
-        b1 = "BƯỚC 1. KIỂM TRA PHẠM VI & MƠ HỒ: Yêu cầu hợp lệ trong installed_apps. Chưa đủ ID/trạng thái thực tế -> ĐỌC TRƯỚC, TUYỆT ĐỐI CẤM gọi tool ghi hay sys.ask_missing_info khi chưa đọc."
-    else:
-        b1 = "BƯỚC 1. KIỂM TRA PHẠM VI & MƠ HỒ: Yêu cầu cụ thể, rõ ràng, đã có đầy đủ ID/điều kiện xác nhận từ tool đọc hoặc hội thoại -> đủ điều kiện thực thi."
-
-    b2 = f"BƯỚC 2. DANH SÁCH VIỆC & PHÂN BIỆT TOOL (Lượt {step_idx + 1}/{total_steps}): Chọn {', '.join(names)}. {conf_str}"
-    b3 = f"BƯỚC 3. THAM SỐ TỐI THIỂU & NGUYÊN VĂN: {describe_minimal_args(calls, catalog)}. Giữ nguyên tên riêng, số liệu, chuỗi gốc của người dùng."
-    return f"{b1}\n{b2}\n{b3}\n{format_tool_calls(calls)}"
+        return f"{think_prefix}\nĐã rõ, tôi sẽ không thực hiện thao tác thay đổi nào thêm."
+    return f"{think_prefix}\n{format_tool_calls(calls)}"
 
 
 def synthetic_arg_value(prop: dict[str, Any], name: str, context_now: str) -> Any:
@@ -664,38 +672,83 @@ def build_confusable_args(
     return out
 
 
+def build_minimal_tool_args(
+    tool_name: str,
+    catalog: dict[str, Any],
+    context_now: str,
+) -> dict[str, Any]:
+    """Generate minimal valid required + x-one-of arguments for synthetic negative calls."""
+    spec = catalog[tool_name]["parameters"]
+    props = spec.get("properties", {})
+    out: dict[str, Any] = {}
+    for rk in spec.get("required", []):
+        out[rk] = synthetic_arg_value(props.get(rk, {}), rk, context_now)
+    for group in spec.get("x-one-of", []):
+        if group and not any(g in out for g in group):
+            g0 = group[0]
+            out[g0] = synthetic_arg_value(props.get(g0, {}), g0, context_now)
+    return out
+
+
+DISTRACTOR_WRITE_TOOLS = (
+    "reminders.create",
+    "alarm.create",
+    "notes.create",
+    "tasks.add",
+    "calendar.create_event",
+)
+
+
 def gen_negative_confusable(
     calls: list[dict[str, Any]],
     installed_tools: set[str],
     catalog: dict[str, Any],
     context_now: str,
-) -> tuple[str, str] | None:
+    think_prefix: str,
+    swap_balance: Counter[str],
+    allow_imbalanced: bool = False,
+) -> tuple[str, str, str, str] | None:
+    """Pick the most balanced confusable tool swap across ALL calls in the turn.
+
+    Returns `(rejected_text, detail, chosen_tool, alt_tool)` so caller only updates
+    `swap_balance` if this negative survives per-step capping.
+    """
+    candidates: list[tuple[tuple[int, int, int], int, dict[str, Any], str]] = []
+    fallback_candidates: list[tuple[tuple[int, int, int], int, dict[str, Any], str]] = []
+
     for idx, c in enumerate(calls):
         n = c["name"]
         if n not in CONFUSABLE_TOOLS:
             continue
-        # Ưu tiên tuyệt đối tool dễ nhầm đang CÓ mặt trong installed_tools của mẫu này
-        alts = [alt for alt, _ in CONFUSABLE_TOOLS[n] if alt in installed_tools]
-        if not alts:
-            alts = [alt for alt, _ in CONFUSABLE_TOOLS[n] if alt in catalog]
-        if not alts:
-            continue
-        alt = alts[0]
-        bad_calls = copy.deepcopy(calls)
-        bad_calls[idx] = {"name": alt, "arguments": build_confusable_args(c, alt, catalog, context_now)}
-        resp = (
-            f"BƯỚC 1. KIỂM TRA PHẠM VI: Yêu cầu hợp lệ.\n"
-            f"BƯỚC 2. CHỌN TOOL: Dùng `{alt}` để xử lý yêu cầu người dùng.\n"
-            f"BƯỚC 3. THỰC THI:\n{format_tool_calls(bad_calls)}"
-        )
-        return resp, f"swap:{n}->{alt}"
-    return None
+        for alt, _ in CONFUSABLE_TOOLS[n]:
+            if alt not in catalog:
+                continue
+            in_inst = alt in installed_tools
+            bal_diff = swap_balance[alt] - swap_balance[n]
+            rank = (1 if in_inst else 0, bal_diff, -idx)
+            fallback_candidates.append((rank, idx, c, alt))
+            if not in_inst:
+                if not (swap_balance[alt] > 0 and swap_balance[n] < 6):
+                    continue
+            elif swap_balance[n] - swap_balance[alt] >= 10 or swap_balance[alt] <= 0:
+                continue
+            candidates.append((rank, idx, c, alt))
+
+    chosen_pool = candidates or (fallback_candidates if allow_imbalanced else [])
+    if not chosen_pool:
+        return None
+    chosen_pool.sort(key=lambda item: item[0], reverse=True)
+    _, idx, c, alt = chosen_pool[0]
+    bad_calls = copy.deepcopy(calls)
+    bad_calls[idx] = {"name": alt, "arguments": build_confusable_args(c, alt, catalog, context_now)}
+    return f"{think_prefix}\n{format_tool_calls(bad_calls)}", f"swap:{c['name']}->{alt}", c["name"], alt
 
 
 def gen_negative_hallucinated_args(
     calls: list[dict[str, Any]],
     catalog: dict[str, Any],
     rng: random.Random,
+    think_prefix: str,
 ) -> tuple[str, str] | None:
     # 1. Thử thêm tham số tuỳ chọn người dùng không yêu cầu (từ schema thật của tool)
     for idx, c in enumerate(calls):
@@ -717,13 +770,7 @@ def gen_negative_hallucinated_args(
             k, val, _ = cands[0]
             bad_calls = copy.deepcopy(calls)
             bad_calls[idx].setdefault("arguments", {})[k] = val
-            resp = (
-                f"BƯỚC 1. KIỂM TRA PHẠM VI: Đủ điều kiện thực hiện.\n"
-                f"BƯỚC 2. CHỌN TOOL: Gọi `{n}`.\n"
-                f"BƯỚC 3. THAM SỐ: Điền đầy đủ các trường bao gồm `{k}={json.dumps(val, ensure_ascii=False)}`.\n"
-                f"{format_tool_calls(bad_calls)}"
-            )
-            return resp, f"extra_opt:{n}.{k}"
+            return f"{think_prefix}\n{format_tool_calls(bad_calls)}", f"extra_opt:{n}.{k}"
 
     # 2. Thử biến dạng chuỗi / số (ví dụ đuôi .test -> .com hoặc bỏ tham số tuỳ chọn người dùng CÓ yêu cầu)
     for idx, c in enumerate(calls):
@@ -732,11 +779,7 @@ def gen_negative_hallucinated_args(
             if isinstance(v, str) and v.endswith(".test"):
                 bad_calls = copy.deepcopy(calls)
                 bad_calls[idx]["arguments"][k] = v[:-5] + ".com"
-                return (
-                    f"BƯỚC 1. KIỂM TRA PHẠM VI: Hợp lệ.\nBƯỚC 2. Gọi `{c['name']}`.\n"
-                    f"BƯỚC 3. Chuẩn hóa địa chỉ.\n{format_tool_calls(bad_calls)}",
-                    f"literal_drift:{c['name']}.{k}",
-                )
+                return f"{think_prefix}\n{format_tool_calls(bad_calls)}", f"literal_drift:{c['name']}.{k}"
     return None
 
 
@@ -746,6 +789,7 @@ def gen_negative_premature_write_or_ask(
     installed_tools: set[str],
     catalog: dict[str, Any],
     context_now: str,
+    think_prefix: str,
 ) -> tuple[str, str] | None:
     """Trên lượt READ: (a) nhảy cóc gọi write với ID tự bịa, hoặc (b) gọi nhầm contacts.search cho banking,
     hoặc (c) gọi sys.ask_missing_info sớm trước khi đọc."""
@@ -758,12 +802,7 @@ def gen_negative_premature_write_or_ask(
             else copy.deepcopy(c)
             for c in turn_calls
         ]
-        return (
-            "BƯỚC 1. KIỂM TRA PHẠM VI: Cần tìm người nhận để chuyển khoản.\n"
-            "BƯỚC 2. NGUỒN ID: Dùng `contacts.search` tra tên người nhận.\n"
-            f"BƯỚC 3. Gọi tool đọc.\n{format_tool_calls(bad_calls)}",
-            "wrong_id_source:banking->contacts.search",
-        )
+        return f"{think_prefix}\n{format_tool_calls(bad_calls)}", "wrong_id_source:banking->contacts.search"
 
     # Nhảy cóc gọi write ở bước đầu trước khi đọc x-ref ID
     for lc in later_calls:
@@ -776,12 +815,7 @@ def gen_negative_premature_write_or_ask(
             bad_call = copy.deepcopy(lc)
             for xk in xrefs:
                 bad_call["arguments"][xk] = f"{xk.split('_')[0]}_01"
-            return (
-                "BƯỚC 1. KIỂM TRA PHẠM VI: Yêu cầu rõ ràng.\n"
-                f"BƯỚC 2. THỰC THI NGAY: Bỏ qua bước đọc, gọi thẳng `{ln}` với ID mặc định.\n"
-                f"BƯỚC 3. Xuất tool call.\n{call_tag(bad_call)}",
-                f"premature_write:{ln}",
-            )
+            return f"{think_prefix}\n{call_tag(bad_call)}", f"premature_write:{ln}"
 
     # Hỏi sys.ask_missing_info sớm trước khi đọc hoặc hỏi nhầm tool đọc
     if read_names and later_calls:
@@ -793,12 +827,7 @@ def gen_negative_premature_write_or_ask(
                 next(iter(catalog[target_write["name"]]["parameters"].get("required", ["id"])), "id"),
             )
             bad_ask = {"name": "sys.ask_missing_info", "arguments": {"tool_name": target_write["name"], "params": [missing_p]}}
-            return (
-                "BƯỚC 1. KIỂM TRA MƠ HỒ: Chưa thấy ID trong câu nói nên hỏi lại người dùng ngay trước khi tra cứu.\n"
-                "BƯỚC 2. Dừng và hỏi.\n"
-                f"BƯỚC 3. Gọi sys.ask_missing_info.\n{call_tag(bad_ask)}",
-                f"premature_ask:{target_write['name']}",
-            )
+            return f"{think_prefix}\n{call_tag(bad_ask)}", f"premature_ask:{target_write['name']}"
     return None
 
 
@@ -809,11 +838,11 @@ def gen_negative_ambiguity_gate(
     catalog: dict[str, Any],
     msgs_so_far: list[dict[str, Any]],
     context_now: str,
+    think_prefix: str,
 ) -> tuple[str, str] | None:
     """Lỗi Ambiguity Gate:
-    - Nếu gold là sys.ask_missing_info: (a) tự bịa giá trị/chọn bừa ID đầu tiên từ tool_result để gọi tool ghi,
-      HOẶC (b) trỏ sai tool_name vào tool đọc.
-    - Nếu gold là write hợp lệ: gọi nhầm sys.ask_missing_info (False Ask).
+    - Nếu gold là sys.ask_missing_info: (a) tự bịa giá trị/chọn bừa ID đầu tiên từ tool_result để gọi tool ghi.
+    - Nếu gold là write/read hợp lệ: gọi nhầm sys.ask_missing_info (False Ask).
     """
     ask_call = next((c for c in calls if c["name"] == "sys.ask_missing_info"), None)
     if ask_call:
@@ -843,12 +872,7 @@ def gen_negative_ambiguity_gate(
                 if not any(k in guess_args for k in g):
                     guess_args[g[0]] = id_hits[0] if (props.get(g[0], {}).get("x-ref") and id_hits) else synthetic_arg_value(props.get(g[0], {}), g[0], context_now)
             bad_write = {"name": tn, "arguments": guess_args}
-            return (
-                f"BƯỚC 1. KIỂM TRA MƠ HỒ: Có nhiều kết quả hoặc thiếu {ps}, nhưng chọn tạm giá trị mặc định/ứng viên đầu tiên để chạy luôn.\n"
-                f"BƯỚC 2. THỰC THI: Gọi `{tn}`.\n"
-                f"BƯỚC 3. Xuất tool call.\n{call_tag(bad_write)}",
-                f"missed_ask_guessed:{tn}",
-            )
+            return f"{think_prefix}\n{call_tag(bad_write)}", f"missed_ask_guessed:{tn}"
 
     # Nếu gold là write hợp lệ -> tạo False Ask
     write_call = next((c for c in calls if catalog[c["name"]]["kind"] == "write"), None)
@@ -858,24 +882,14 @@ def gen_negative_ambiguity_gate(
         if not target_p:
             target_p = next(iter(catalog[write_call["name"]]["parameters"].get("required", ["id"])), "id")
         bad_ask = {"name": "sys.ask_missing_info", "arguments": {"tool_name": write_call["name"], "params": [target_p]}}
-        return (
-            f"BƯỚC 1. KIỂM TRA MƠ HỒ: Chưa chắc chắn tham số `{target_p}`, nên hỏi lại người dùng.\n"
-            f"BƯỚC 2. Dừng quy trình.\n"
-            f"BƯỚC 3. Gọi sys.ask_missing_info.\n{call_tag(bad_ask)}",
-            f"false_ask:{write_call['name']}.{target_p}",
-        )
+        return f"{think_prefix}\n{call_tag(bad_ask)}", f"false_ask:{write_call['name']}.{target_p}"
     # Nếu gold là read (không có write) -> tạo False Ask trỏ nhầm vào tool đọc (lỗi kinh điển bị cấm ở V15)
     read_call = next((c for c in calls if catalog[c["name"]]["kind"] == "read"), None)
     if read_call:
         props = list(catalog[read_call["name"]]["parameters"].get("properties", {}).keys())
         target_p = props[0] if props else "query"
         bad_ask = {"name": "sys.ask_missing_info", "arguments": {"tool_name": read_call["name"], "params": [target_p]}}
-        return (
-            f"BƯỚC 1. KIỂM TRA MƠ HỒ: Hỏi lại tham số `{target_p}` trước khi gọi tool đọc `{read_call['name']}`.\n"
-            "BƯỚC 2. Dừng và hỏi người dùng.\n"
-            f"BƯỚC 3. Gọi sys.ask_missing_info.\n{call_tag(bad_ask)}",
-            f"false_ask_on_read:{read_call['name']}",
-        )
+        return f"{think_prefix}\n{call_tag(bad_ask)}", f"false_ask_on_read:{read_call['name']}"
     return None
 
 
@@ -885,20 +899,20 @@ def gen_negative_scope_or_multi(
     item: dict[str, Any],
     catalog: dict[str, Any],
     context_now: str,
+    think_prefix: str,
+    installed_tools: set[str] | None = None,
+    step_idx: int = 0,
+    rng: random.Random | None = None,
     no_app_dropped: list[str] | None = None,
 ) -> tuple[str, str] | None:
-    """(a) Bỏ sót việc thứ 2 / nhánh ELSE (early stop), hoặc (b) False Act trên empty/no_app."""
+    """(a) Bỏ sót việc thứ 2 / nhánh ELSE (early stop), (b) chèn thêm write tool dư thừa (spurious_extra_write),
+    hoặc (c) False Act trên empty/no_app."""
     if no_app_dropped is not None:
         # Gọi bừa tool gốc vốn đã bị gỡ khỏi installed_apps hoặc sys.ask_missing_info
         orig_calls = item["label"]["tool_calls"]
         bad_call = copy.deepcopy(orig_calls[0]) if orig_calls else {"name": "sys.ask_missing_info", "arguments": {"tool_name": "app.action", "params": ["id"]}}
         if bad_call["name"] == "sys.ask_missing_info" or no_app_dropped:
-            return (
-                "BƯỚC 1. KIỂM TRA PHẠM VI: Thử gọi tool đáp ứng yêu cầu người dùng.\n"
-                "BƯỚC 2. Thực thi mặc dù app không nằm trong installed_apps.\n"
-                f"BƯỚC 3. Xuất tool call.\n{call_tag(bad_call)}",
-                f"false_act_no_app:{bad_call['name']}",
-            )
+            return f"{think_prefix}\n{call_tag(bad_call)}", f"false_act_no_app:{bad_call['name']}"
 
     if not calls:
         # Empty sample: tạo False Act gọi 1 tool hợp lệ đầu tiên trong installed_apps hoặc sys.ask_missing_info
@@ -913,29 +927,37 @@ def gen_negative_scope_or_multi(
                 break
         if picked is None:
             picked = {"name": "sys.ask_missing_info", "arguments": {"tool_name": "calendar.create_event", "params": ["title"]}}
-        return (
-            "BƯỚC 1. KIỂM TRA PHẠM VI: Cố gắng thực hiện bằng cách gọi tool kiểm tra hoặc hỏi lại.\n"
-            f"BƯỚC 2. Gọi `{picked['name']}`.\n"
-            f"BƯỚC 3. Xuất tool call.\n{call_tag(picked)}",
-            f"false_act_empty:{picked['name']}",
-        )
+        return f"{think_prefix}\n{call_tag(picked)}", f"false_act_empty:{picked['name']}"
+
+    # Spurious extra write: model gọi đúng tool nhưng tự ý chèn thêm tool ghi dư thừa (reminders.create / alarm.create / ...)
+    is_act = not any(c["name"] == "sys.ask_missing_info" for c in calls)
+    distractors: list[str] = []
+    if is_act and installed_tools:
+        used_apps = set(sample_apps(item["label"]["tool_calls"]))
+        distractors = [
+            dt for dt in DISTRACTOR_WRITE_TOOLS
+            if dt in installed_tools and dt in catalog and dt.split(".")[0] not in used_apps
+        ]
+    prefer_spurious = False
+    if distractors:
+        if len(calls) == 1 and not later_calls:
+            prefer_spurious = True
+        elif step_idx >= 1:
+            prefer_spurious = True if len(calls) == 1 else (rng.random() < 0.5 if rng else True)
+        elif len(calls) > 1:
+            prefer_spurious = rng.random() < 0.5 if rng else False
+    if prefer_spurious:
+        d_tool = rng.choice(distractors) if rng else distractors[0]
+        d_call = {"name": d_tool, "arguments": build_minimal_tool_args(d_tool, catalog, context_now)}
+        bad_calls = copy.deepcopy(calls) + [d_call]
+        return f"{think_prefix}\n{format_tool_calls(bad_calls)}", f"spurious_extra_write:{d_tool}"
 
     # Multi-action / multi-step early stop: bỏ qua call còn lại trong cùng lượt hoặc dừng hẳn không làm tiếp later_calls
     if len(calls) > 1:
-        return (
-            "BƯỚC 1. KIỂM TRA PHẠM VI: Thực hiện tác vụ đầu tiên trong yêu cầu.\n"
-            f"BƯỚC 2. Chỉ gọi `{calls[0]['name']}` rồi dừng, bỏ sót các việc còn lại.\n"
-            f"BƯỚC 3. Xuất tool call.\n{call_tag(calls[0])}",
-            "multi_action_early_stop",
-        )
+        return f"{think_prefix}\n{call_tag(calls[0])}", "multi_action_early_stop"
     if later_calls:
-        # Kết thúc sớm ngay sau lượt read mà không gọi tiếp bước thực thi
-        return (
-            "BƯỚC 1. KIỂM TRA PHẠM VI: Đã hoàn tất bước tra cứu ban đầu.\n"
-            "BƯỚC 2. Dừng sớm, bỏ qua bước ghi/nhánh ngược lại tiếp theo.\n"
-            "Tôi đã kiểm tra thông tin xong rồi ạ.",
-            "early_stop_after_read",
-        )
+        # Kết thúc sớm ngay sau lượt read mà không gọi tiếp bước thực thi (dòng cuối 1 dòng không chứa <tool_call>)
+        return f"{think_prefix}\nTôi đã kiểm tra thông tin xong rồi ạ.", "early_stop_after_read"
     return None
 
 
@@ -1017,6 +1039,7 @@ def build_dataset(root: Path, out_dir: Path, val_ratio: float = 0.05, seed: int 
         val_sample_ids.update(sids_copy[:n_val])
 
     pairs_by_split: dict[str, list[dict[str, Any]]] = {"train": [], "val": []}
+    swap_balance: Counter[str] = Counter()
     stats = {
         "source_dpo_ids": len(dpo_ids),
         "deduped_samples": len(clean_dpo_ids),
@@ -1030,6 +1053,24 @@ def build_dataset(root: Path, out_dir: Path, val_ratio: float = 0.05, seed: int 
         "by_negative_class": Counter(),
         "by_app": Counter(),
     }
+
+    def _record_pair(split_name: str, rec: dict[str, Any], count_apps: bool = True) -> None:
+        if rec["chosen"] == rec["rejected"]:
+            return
+        pairs_by_split[split_name].append(rec)
+        if split_name == "train":
+            c_tools = _extract_call_names(rec["chosen"])
+            r_tools = _extract_call_names(rec["rejected"])
+            for t in c_tools - r_tools:
+                swap_balance[t] += 1
+            for t in r_tools - c_tools:
+                swap_balance[t] -= 1
+        stats["by_split"][split_name] += 1
+        stats["by_intent"][rec["intent"]] += 1
+        stats["by_negative_class"][rec["negative_class"]] += 1
+        if count_apps:
+            for a in rec["apps"]:
+                stats["by_app"][a] += 1
 
     for sid in clean_dpo_ids:
         item = rows[sid]
@@ -1055,27 +1096,24 @@ def build_dataset(root: Path, out_dir: Path, val_ratio: float = 0.05, seed: int 
 
         if not calls:
             # Mẫu empty gốc: chỉ 1 turn
+            think_empty = make_shared_think_prefix([], 0, 1, "empty", catalog)
             chosen = make_chosen_response([], 0, 1, "empty", catalog)
-            neg = gen_negative_scope_or_multi([], [], item, catalog, now_str)
+            neg = gen_negative_scope_or_multi([], [], item, catalog, now_str, think_empty, installed_set, 0, rng)
             if neg:
                 rej_text, detail = neg
-                pairs_by_split[split_name].append({
+                _record_pair(split_name, {
                     "id": f"{sid}_s0_empty_scope",
                     "sample_id": sid,
                     "step": 0,
                     "intent": "empty",
                     "negative_class": "multi_action_or_scope_error",
                     "negative_detail": detail,
-                    "apps": target_apps,
+                    "apps": target_apps[:1],
                     "tool_names": tool_names,
                     "prompt": base_msgs,
                     "chosen": chosen,
                     "rejected": rej_text,
                 })
-                stats["by_split"][split_name] += 1
-                stats["by_intent"]["empty"] += 1
-                stats["by_negative_class"]["multi_action_or_scope_error"] += 1
-                stats["by_app"][target_apps[0]] += 1
             stats["gold_hash_verified"] += 1
             continue
 
@@ -1087,29 +1125,52 @@ def build_dataset(root: Path, out_dir: Path, val_ratio: float = 0.05, seed: int 
         for step_idx, grp in enumerate(turn_groups):
             step_calls = [calls[idx] for idx in grp]
             later_calls = [calls[idx] for later_grp in turn_groups[step_idx + 1:] for idx in later_grp]
+            think_prefix = make_shared_think_prefix(step_calls, step_idx, len(turn_groups), intent, catalog)
             chosen = make_chosen_response(step_calls, step_idx, len(turn_groups), intent, catalog)
 
             negs: list[tuple[str, str, str]] = []
-            if res := gen_negative_confusable(step_calls, installed_set, catalog, now_str):
-                negs.append(("confusable_tool", res[0], res[1]))
-            if res := gen_negative_hallucinated_args(step_calls, catalog, rng):
+            if res := gen_negative_hallucinated_args(step_calls, catalog, rng, think_prefix):
                 negs.append(("hallucinated_optional_args", res[0], res[1]))
             if step_idx == 0 and all(catalog[c["name"]]["kind"] == "read" for c in step_calls):
-                if res := gen_negative_premature_write_or_ask(step_calls, later_calls, installed_set, catalog, now_str):
+                if res := gen_negative_premature_write_or_ask(step_calls, later_calls, installed_set, catalog, now_str, think_prefix):
                     negs.append(("premature_write_or_ask", res[0], res[1]))
-            if res := gen_negative_ambiguity_gate(step_calls, step_idx, installed_set, catalog, msgs, now_str):
+            if res := gen_negative_ambiguity_gate(step_calls, step_idx, installed_set, catalog, msgs, now_str, think_prefix):
                 negs.append(("ambiguity_gate_error", res[0], res[1]))
-            if res := gen_negative_scope_or_multi(step_calls, later_calls, item, catalog, now_str):
+            if res := gen_negative_scope_or_multi(
+                step_calls, later_calls, item, catalog, now_str, think_prefix, installed_set, step_idx, rng
+            ):
                 negs.append(("multi_action_or_scope_error", res[0], res[1]))
+            if conf_res := gen_negative_confusable(
+                step_calls,
+                installed_set,
+                catalog,
+                now_str,
+                think_prefix,
+                swap_balance,
+                allow_imbalanced=(len(negs) == 0),
+            ):
+                negs.append(("confusable_tool", conf_res[0], conf_res[1]))
 
-            # Giữ tối đa 2-3 cặp đa dạng cho mỗi step để cân bằng và giữ file dưới 50MB cho GitHub
-            cap = 2 if (len(msgs) > 10 or step_idx >= 2) else 3
+            # Giữ tối đa 2 cặp đa dạng theo cân bằng chosen vs rejected để dpo_train.jsonl < 45MB
+            cap = 2
             if len(negs) > cap:
-                rng.shuffle(negs)
+                c_tools_turn = _extract_call_names(chosen)
+
+                def _neg_priority(item_neg: tuple[str, str, str]) -> float:
+                    r_tools_turn = _extract_call_names(item_neg[1])
+                    c_only = c_tools_turn - r_tools_turn
+                    r_only = r_tools_turn - c_tools_turn
+                    return (
+                        min((-swap_balance[t] for t in c_only), default=0)
+                        - max((-swap_balance[t] for t in r_only), default=0)
+                        + rng.random() * 0.5
+                    )
+
+                negs.sort(key=_neg_priority, reverse=True)
                 negs = negs[:cap]
 
             for neg_cls, rej_text, detail in negs:
-                pairs_by_split[split_name].append({
+                _record_pair(split_name, {
                     "id": f"{sid}_s{step_idx}_{neg_cls}",
                     "sample_id": sid,
                     "step": step_idx,
@@ -1122,11 +1183,6 @@ def build_dataset(root: Path, out_dir: Path, val_ratio: float = 0.05, seed: int 
                     "chosen": chosen,
                     "rejected": rej_text,
                 })
-                stats["by_split"][split_name] += 1
-                stats["by_intent"][intent] += 1
-                stats["by_negative_class"][neg_cls] += 1
-                for a in target_apps:
-                    stats["by_app"][a] += 1
 
             # Cập nhật lịch sử msgs bằng kết quả thật của ToolEnv cho step kế tiếp
             msgs.append(assistant_msg("", step_calls))
@@ -1147,10 +1203,13 @@ def build_dataset(root: Path, out_dir: Path, val_ratio: float = 0.05, seed: int 
                 no_app_msgs = build_messages(no_app_item, turns_texts, keep=len(turns_texts) - 1)
                 no_app_tools = tool_specs(no_app_item, catalog)
                 no_app_tool_names = [t["function"]["name"] for t in no_app_tools]
+                think_na = make_shared_think_prefix([], 0, 1, "no_app", catalog, no_app_dropped=dropped_apps)
                 chosen_na = make_chosen_response([], 0, 1, "no_app", catalog, no_app_dropped=dropped_apps)
-                if neg := gen_negative_scope_or_multi([], [], no_app_item, catalog, now_str, no_app_dropped=dropped_apps):
+                if neg := gen_negative_scope_or_multi(
+                    [], [], no_app_item, catalog, now_str, think_na, no_app_dropped=dropped_apps
+                ):
                     rej_na, detail_na = neg
-                    pairs_by_split[split_name].append({
+                    _record_pair(split_name, {
                         "id": f"{sid}_no_app",
                         "sample_id": sid,
                         "step": 0,
@@ -1162,10 +1221,7 @@ def build_dataset(root: Path, out_dir: Path, val_ratio: float = 0.05, seed: int 
                         "prompt": no_app_msgs,
                         "chosen": chosen_na,
                         "rejected": rej_na,
-                    })
-                    stats["by_split"][split_name] += 1
-                    stats["by_intent"]["no_app"] += 1
-                    stats["by_negative_class"]["multi_action_or_scope_error"] += 1
+                    }, count_apps=False)
 
     assert stats["gold_hash_failed"] == 0, f"Found {stats['gold_hash_failed']} ToolEnv hash mismatches!"
 

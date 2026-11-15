@@ -44,47 +44,55 @@ Sử dụng bộ dữ liệu đã được sinh và kiểm chứng `gold_hash_ve
   - `hallucinated_optional_args`: **724** (Tự điền tham số tùy chọn hoặc làm biến dạng literal)
   - `premature_write_or_ask`: **372** (Nhảy cóc gọi tool ghi hoặc hỏi sớm khi chưa gọi tool đọc)
 
-**Lệnh huấn luyện Giai đoạn 1:**
+**Lệnh huấn luyện Giai đoạn 1 (đã tối ưu tốc độ + live log + auto-resume Drive):**
 ```bash
-# Trên G4 96GB / A100 (bf16 LoRA thuần, không cần 4-bit)
-python -m lifemate.planner.train_dpo \
+# Trên G4 96GB / A100 (bf16 LoRA thuần, tắt --precompute-ref-log-probs để PEFT toggle adapter tức thì)
+python -u -X utf8 -m lifemate.planner.train_dpo \
   --model empero-ai/Qwen3.8-4B-Distill \
   --train-data optimize/dpo/dataset/dpo_train.jsonl \
   --val-data optimize/dpo/dataset/dpo_val.jsonl \
   --out-dir checkpoints/planner_dpo_qwen38_lora \
-  --epochs 2.0 --lr 5e-6 --beta 0.1 --rank 16 --wrap-think \
-  --max-prompt-length 9216 --max-length 10240 \
-  --precompute-ref-log-probs --bs 2 --grad-accum 8  # dùng --bs 1 --grad-accum 16 nếu là A100 40GB
+  --epochs 1.0 --lr 5e-6 --beta 0.1 --rank 16 --wrap-think \
+  --max-pairs-per-sample 2 --max-prompt-length 9216 --max-length 10240 \
+  --bs 2 --grad-accum 8 --save-steps 50 --eval-steps 50 --logging-steps 2 \
+  --auto-resume --drive-backup-dir /content/drive/MyDrive/ZAIC_2026_runs/checkpoints/planner_dpo_qwen38_lora
 
-# Trên L4 22.5GB (bắt buộc bật QLoRA 4-bit)
-python -m lifemate.planner.train_dpo \
+# Trên L4 22.5GB (QLoRA 4-bit + TF32 + SDPA + --auto-resume)
+python -u -X utf8 -m lifemate.planner.train_dpo \
   --model empero-ai/Qwen3.8-4B-Distill \
   --train-data optimize/dpo/dataset/dpo_train.jsonl \
   --val-data optimize/dpo/dataset/dpo_val.jsonl \
   --out-dir checkpoints/planner_dpo_qwen38_lora \
-  --epochs 2.0 --lr 5e-6 --beta 0.1 --rank 16 --wrap-think \
-  --max-prompt-length 9216 --max-length 10240 \
-  --load-in-4bit --precompute-ref-log-probs --bs 1 --grad-accum 16
+  --epochs 1.0 --lr 5e-6 --beta 0.1 --rank 16 --wrap-think \
+  --max-pairs-per-sample 2 --max-prompt-length 9216 --max-length 10240 \
+  --load-in-4bit --bs 1 --grad-accum 16 --save-steps 50 --eval-steps 50 --logging-steps 2 \
+  --auto-resume --drive-backup-dir /content/drive/MyDrive/ZAIC_2026_runs/checkpoints/planner_dpo_qwen38_lora
 ```
+
+> **Bài học từ phiên Colab L4 >500 phút (đã khắc phục triệt để):**
+> 1. **`os.system()` nuốt hoàn toàn stdout trên IPython/Colab:** Cell 6B trước đây dùng `os.system()` nên toàn bộ log Python/HF bị đẩy ra file descriptor ngầm của kernel thay vì stream lên cell UI. Nay mọi cell đều dùng `subprocess.Popen(..., bufsize=1)` kèm `-u` (`PYTHONUNBUFFERED=1`), stream từng dòng theo thời gian thực và ghi song song vào `/content/drive/MyDrive/ZAIC_2026_runs/train_dpo_s1.log`.
+> 2. **`--precompute-ref-log-probs` gây treo trước Step 1:** Trên 4,798 cặp dài 6K–9K token, cờ này ép model chạy 9,596 lượt forward reference trước khi bước vào Step 1. Tắt cờ này để `DPOTrainer` tự tắt/bật LoRA adapter (`ref_model=None`) không tốn thêm VRAM và vào Step 1 ngay sau tokenization.
+> 3. **Giảm thời gian L4 xuống ~45–60 phút:** Bật `--max-pairs-per-sample 2` (`4,798 -> 2,027` cặp cân bằng, giữ nguyên 100% 1,087 mẫu train & 5 nhóm lỗi), `--epochs 1.0`, TF32 (`allow_tf32=True`), `attn_implementation="sdpa"`, và `--save-steps 50 --auto-resume --drive-backup-dir ...` để khôi phục ngay nếu Colab thu hồi GPU.
 
 > **Lưu ý đặc thù về `<think>` của `empero-ai/Qwen3.8-4B-Distill`:**
 > `chat_template.jinja` của `empero-ai/Qwen3.8-4B-Distill` chèn sẵn `<think>\n` ở cuối `add_generation_prompt=True` (hoặc `<think>\n\n</think>\n\n` khi truyền `enable_thinking=False`).
 > - `train_dpo.py` tự kiểm tra `prompt_opens_think`: khi prompt đã mở `<think>\n`, cả `chosen` và `rejected` đều được đóng đối xứng bằng `</think>\n\n` sau phần `BƯỚC 1/2/3` trước `<tool_call>` (nên bật kèm `--wrap-think` để đồng bộ cả ở mọi chế độ).
 > - Tránh tuyệt đối việc một bên có `<think>`/`</think>` còn bên kia không có, vì DPO sẽ học lầm vào độ dài/sự tồn tại của `<think>` thay vì tri thức chọn tool.
 
-**Đo lường Trước vs Sau (Giai đoạn 1):**
-```bash
-# 1. Baseline Qwen 3.8 4B trên Val (300) và Test (100)
-python -m lifemate.planner.runner --root data --split train --text --llm empero-ai/Qwen3.8-4B-Distill --mapper none --gpu-mem 0.90 --max-ctx 12288 --verify-rounds 0 --prompt prompts/gepa/vuong/planner_v15.txt --ids eval/splits/dev_ids.txt --resume --out runs/dev_qwen38_base.jsonl
-python -m lifemate.planner.runner --root data --split train --text --llm empero-ai/Qwen3.8-4B-Distill --mapper none --gpu-mem 0.90 --max-ctx 12288 --verify-rounds 0 --prompt prompts/gepa/vuong/planner_v15.txt --ids eval/splits/test_ids.txt --resume --out runs/test_qwen38_base.jsonl
+**Baseline `empero-ai/Qwen3.8-4B-Distill` đã chạy xong & lưu sẵn trong repo (`optimize/dpo/baseline_runs/`):**
+- **Val (`dev_ids.txt`, N=300):** Mean Score = `0.3940` (`act=0.4149`, `ask=0.0778`, `empty=0.7727`; `held_out_val=0.3697`, `seen_train=0.2488`).
+- **Test (`test_ids.txt`, N=100):** Mean Score = `0.4394` (`act=0.4954`, `ask=0.0571`, `empty=0.5714`; `held_out_test=0.4804`, `seen_train=0.3007`).
+- Cell 6A của notebook tự khôi phục hai file baseline trên từ `optimize/dpo/baseline_runs/` (hoặc Google Drive) và bỏ qua bước chạy vLLM Baseline để dành toàn bộ GPU cho Train DPO.
 
-# 2. Sau DPO Giai đoạn 1
+**Đo lường Sau DPO (Giai đoạn 1):**
+```bash
+# 1. Sau DPO Giai đoạn 1 (Baseline đã có sẵn ở optimize/dpo/baseline_runs/)
 python -m lifemate.planner.runner --root data --split train --text --llm empero-ai/Qwen3.8-4B-Distill --llm-lora checkpoints/planner_dpo_qwen38_lora --mapper none --gpu-mem 0.90 --max-ctx 12288 --verify-rounds 0 --prompt prompts/gepa/vuong/planner_v15.txt --ids eval/splits/dev_ids.txt --resume --out runs/dev_qwen38_dpo_s1.jsonl
 python -m lifemate.planner.runner --root data --split train --text --llm empero-ai/Qwen3.8-4B-Distill --llm-lora checkpoints/planner_dpo_qwen38_lora --mapper none --gpu-mem 0.90 --max-ctx 12288 --verify-rounds 0 --prompt prompts/gepa/vuong/planner_v15.txt --ids eval/splits/test_ids.txt --resume --out runs/test_qwen38_dpo_s1.jsonl
 
-# 3. Chấm điểm chia theo app (Val 300 & Test 100)
-python eval/scorer.py --sub runs/dev_qwen38_base.jsonl --compare runs/dev_qwen38_dpo_s1.jsonl --dev-ids eval/splits/dev_ids.txt --by-app
-python eval/scorer.py --sub runs/test_qwen38_base.jsonl --compare runs/test_qwen38_dpo_s1.jsonl --dev-ids eval/splits/test_ids.txt --by-app
+# 2. Chấm điểm chia theo app (Val 300 & Test 100)
+python eval/scorer.py --sub optimize/dpo/baseline_runs/dev_qwen38_base.jsonl --compare runs/dev_qwen38_dpo_s1.jsonl --dev-ids eval/splits/dev_ids.txt --by-app
+python eval/scorer.py --sub optimize/dpo/baseline_runs/test_qwen38_base.jsonl --compare runs/test_qwen38_dpo_s1.jsonl --dev-ids eval/splits/test_ids.txt --by-app
 ```
 
 ---
@@ -109,15 +117,15 @@ python eval/scorer.py --sub runs/test_qwen38_base.jsonl --compare runs/test_qwen
 
 Vì prompt chứa danh sách JSON Schema các tool dài **5.9K–8.5K tokens** (tối đa ~9.4K tokens), DPO cần tính log-prob cho cả `chosen` và `rejected` trên chuỗi lên tới `9,216–10,240` tokens:
 
-| Runtime Colab | Bộ nhớ / Kiến trúc | Hỗ trợ `bf16` & CUDA/vLLM | Cấu hình DPO khuyến nghị | Thời gian ước tính (Train + Eval) | Khuyến nghị |
+| Runtime Colab | Bộ nhớ / Kiến trúc | Hỗ trợ `bf16` & CUDA/vLLM | Cấu hình DPO khuyến nghị (`--max-pairs-per-sample 2 --epochs 1.0`, tắt `precompute_ref`) | Thời gian ước tính (Train) | Khuyến nghị |
 |---|---|---:|---|---|---|
-| **G4 (`RTX PRO 6000` Blackwell)** | **96 GB GDDR7** | Có (Blackwell, native `bf16`) | `bf16` LoRA thuần (tắt 4-bit), `--precompute-ref-log-probs --bs 2 --grad-accum 8` | **~25–40 phút** | **Khuyên dùng #1 (khi A100 hết slot)** — Dư VRAM, chạy cực nhanh cả DPO lẫn vLLM |
-| **L4** | **22.5 GB VRAM** | Có (Ada SM89, native `bf16`) | Bắt buộc `--load-in-4bit --precompute-ref-log-probs --bs 1 --grad-accum 16` | **~2.5–3.5 giờ** | **Lựa chọn #2 (Tiết kiệm Compute Units)** — Ổn định, đủ chạy hết pipeline |
-| **A100** | **40 GB / 80 GB VRAM** | Có (Ampere SM80) | `bf16` LoRA thuần, `--bs 1 --grad-accum 16` | **~45–60 phút** | Rất tốt nhưng hiện Colab đang hết suất (nếu trống lại vẫn dùng tốt) |
-| **T4** | **15–16 GB VRAM** | **Không** (Turing SM75, chỉ `fp16`) | Dễ OOM / quá chậm khi train DPO trên context 6K–9K tokens | > 6 giờ / dễ OOM | **KHÔNG dùng T4 để train DPO** (chỉ dùng cho inference vLLM nếu cần) |
+| **G4 (`RTX PRO 6000` Blackwell)** | **96 GB GDDR7** | Có (Blackwell, native `bf16`) | `bf16` LoRA thuần (tắt 4-bit), `--bs 2 --grad-accum 8`, TF32+SDPA | **~15–20 phút** | **Khuyên dùng #1 (khi A100 hết slot)** — Dư VRAM, chạy cực nhanh cả DPO lẫn vLLM |
+| **L4** | **22.5 GB VRAM** | Có (Ada SM89, native `bf16`) | QLoRA `--load-in-4bit --bs 1 --grad-accum 16`, TF32+SDPA, `--auto-resume` | **~45–60 phút** | **Lựa chọn #2 (Tiết kiệm Compute Units)** — Auto-backup Drive mỗi 50 step |
+| **A100** | **40 GB / 80 GB VRAM** | Có (Ampere SM80) | `bf16` LoRA thuần, `--bs 1 --grad-accum 16`, TF32+SDPA | **~20–30 phút** | Rất tốt nhưng hiện Colab đang hết suất (nếu trống lại vẫn dùng tốt) |
+| **T4** | **15–16 GB VRAM** | **Không** (Turing SM75, chỉ `fp16`) | Dễ OOM / quá chậm khi train DPO trên context 6K–9K tokens | > 4 giờ / dễ OOM | **KHÔNG dùng T4 để train DPO** (chỉ dùng cho inference vLLM nếu cần) |
 | **TPU (`v5e-1` / `v6e-1`)** | **16–32 GB HBM** (XLA) | **Không** (không có CUDA / vLLM / `bitsandbytes`) | Phải viết lại toàn bộ trainer sang `torch_xla` + biên dịch XLA lại theo độ dài prompt biến thiên | Không tương thích | **KHÔNG dùng TPU** — Stack hiện tại (`trl`/`peft`/`vllm`) chỉ chạy trên NVIDIA CUDA GPU |
 
-> **Mẹo triển khai thực tế:** Mở `notebooks/colab_train_dpo_qwen38_4b.ipynb`, notebook tự nhận diện G4 / A100 / L4 / T4 (và báo lỗi rõ nếu chọn nhầm TPU) để tự điền sẵn cờ `--load-in-4bit`, `--bs`, `--grad-accum`, `--precompute-ref-log-probs` phù hợp.
+> **Mẹo triển khai thực tế:** Mở `notebooks/colab_train_dpo_qwen38_4b.ipynb`, notebook tự nhận diện G4 / A100 / L4 / T4 (và báo lỗi rõ nếu chọn nhầm TPU), tự điền sẵn cờ `--load-in-4bit`, `--bs`, `--grad-accum`, bỏ qua bước chạy Baseline nếu `optimize/dpo/baseline_runs/` đã đủ mẫu, stream log từng step qua `subprocess.Popen`, và sao lưu/khôi phục checkpoint qua Google Drive.
 
 ---
 
@@ -128,4 +136,5 @@ Vì prompt chứa danh sách JSON Schema các tool dài **5.9K–8.5K tokens** (
 - **Script sinh dữ liệu DPO Giai đoạn 1:** [scripts/build_dpo_dataset.py](../../scripts/build_dpo_dataset.py)
 - **Script lấy mẫu On-Policy Giai đoạn 2:** [scripts/sample_onpolicy_dpo.py](../../scripts/sample_onpolicy_dpo.py)
 - **Dữ liệu DPO Giai đoạn 1:** [optimize/dpo/dataset/](README.md)
+- **Baseline Qwen 3.8 4B đã hoàn tất (Val 300 & Test 100):** [optimize/dpo/baseline_runs/](baseline_runs/baseline_summary.txt)
 - **Scorer chia theo App (Trước vs Sau):** [eval/scorer.py](../../eval/scorer.py)

@@ -27,8 +27,10 @@ import inspect
 import json
 import os
 import re
+import shutil
 import sys
-from collections import Counter
+import time
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -165,6 +167,192 @@ def format_row_for_dpo(
     return {"prompt": prompt_str, "chosen": chosen_str, "rejected": rejected_str}
 
 
+def log_info(msg: str) -> None:
+    """Print a timestamped status line and flush immediately for live Colab streaming."""
+    ts = time.strftime("%H:%M:%S")
+    print(f"[{ts}] {msg}", flush=True)
+
+
+def select_balanced_pairs(rows: list[dict[str, Any]], max_per_sample: int) -> list[dict[str, Any]]:
+    """Keep up to `max_per_sample` pairs per sample_id, balanced round-robin across negative_class."""
+    if max_per_sample <= 0:
+        return rows
+    sample_order: list[str] = []
+    by_sample: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    for row in rows:
+        sid = str(row.get("sample_id", ""))
+        neg = str(row.get("negative_class", "unknown"))
+        if sid not in by_sample:
+            sample_order.append(sid)
+            by_sample[sid] = defaultdict(list)
+        by_sample[sid][neg].append(row)
+
+    selected: list[dict[str, Any]] = []
+    for sid in sample_order:
+        buckets = list(by_sample[sid].values())
+        picked: list[dict[str, Any]] = []
+        idx = 0
+        while len(picked) < max_per_sample:
+            progressed = False
+            for bucket in buckets:
+                if idx < len(bucket) and len(picked) < max_per_sample:
+                    picked.append(bucket[idx])
+                    progressed = True
+            if not progressed:
+                break
+            idx += 1
+        selected.extend(picked)
+    return selected
+
+
+def _list_valid_checkpoints(directory: Path) -> list[tuple[int, Path]]:
+    if not directory.exists():
+        return []
+    found: list[tuple[int, Path]] = []
+    for p in directory.iterdir():
+        if p.is_dir() and p.name.startswith("checkpoint-"):
+            suffix = p.name.split("-", 1)[1]
+            if suffix.isdigit() and (p / "trainer_state.json").exists():
+                found.append((int(suffix), p))
+    return sorted(found, key=lambda item: item[0])
+
+
+def _copy_dir_safe(src: Path, dst: Path) -> None:
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp_dst = dst.parent / f".tmp_{dst.name}"
+    if tmp_dst.exists():
+        shutil.rmtree(tmp_dst, ignore_errors=True)
+    shutil.copytree(src, tmp_dst)
+    if dst.exists():
+        shutil.rmtree(dst, ignore_errors=True)
+    tmp_dst.rename(dst)
+
+
+def sync_checkpoint_to_drive(local_ckpt: Path, drive_backup_dir: Path, keep_last: int = 2) -> None:
+    """Copy a completed checkpoint-* folder to Google Drive and prune older backups."""
+    if not local_ckpt.exists():
+        return
+    try:
+        drive_backup_dir.mkdir(parents=True, exist_ok=True)
+        dst_ckpt = drive_backup_dir / local_ckpt.name
+        _copy_dir_safe(local_ckpt, dst_ckpt)
+        ckpts = _list_valid_checkpoints(drive_backup_dir)
+        for _, old_ckpt in ckpts[:-keep_last] if len(ckpts) > keep_last else []:
+            shutil.rmtree(old_ckpt, ignore_errors=True)
+        log_info(f"Synced {local_ckpt.name} -> {dst_ckpt}")
+    except Exception as exc:
+        log_info(f"Warning: failed to sync {local_ckpt.name} to Drive ({exc})")
+
+
+def sync_final_adapter_to_drive(out_dir: Path, drive_backup_dir: Path) -> None:
+    """Copy saved top-level adapter and tokenizer files (excluding checkpoint-* subdirs) to Drive."""
+    try:
+        drive_backup_dir.mkdir(parents=True, exist_ok=True)
+        copied = 0
+        for item in out_dir.iterdir():
+            if item.is_file():
+                shutil.copy2(item, drive_backup_dir / item.name)
+                copied += 1
+        log_info(f"Synced {copied} final adapter files -> {drive_backup_dir}")
+    except Exception as exc:
+        log_info(f"Warning: failed to sync final adapter to Drive ({exc})")
+
+
+def resolve_resume_checkpoint(out_dir: Path, drive_backup_dir: str) -> str | None:
+    """Restore newer checkpoint-* from Drive if needed and return the highest valid local checkpoint path."""
+    local_ckpts = _list_valid_checkpoints(out_dir)
+    latest_local_step = local_ckpts[-1][0] if local_ckpts else -1
+
+    if drive_backup_dir:
+        drive_path = Path(drive_backup_dir)
+        drive_ckpts = _list_valid_checkpoints(drive_path)
+        if drive_ckpts and drive_ckpts[-1][0] > latest_local_step:
+            top_step, top_drive_ckpt = drive_ckpts[-1]
+            restored = out_dir / top_drive_ckpt.name
+            log_info(f"Restoring newer Drive checkpoint checkpoint-{top_step} -> {restored}")
+            _copy_dir_safe(top_drive_ckpt, restored)
+            local_ckpts = _list_valid_checkpoints(out_dir)
+
+    if not local_ckpts:
+        return None
+    best_step, best_path = local_ckpts[-1]
+    log_info(f"Auto-resuming DPO training from {best_path} (step {best_step})")
+    return str(best_path)
+
+
+def build_live_callback(out_dir: Path, drive_backup_dir: str) -> Any:
+    """Construct a Hugging Face TrainerCallback for step-by-step streaming logs and Drive backup."""
+    from transformers import TrainerCallback
+
+    backup_path = Path(drive_backup_dir) if drive_backup_dir else None
+
+    class LiveDPOProgressCallback(TrainerCallback):
+        def __init__(self) -> None:
+            self.t0 = time.monotonic()
+            self.start_step = 0
+
+        def on_train_begin(self, args, state, control, **kwargs) -> None:  # type: ignore[override]
+            self.t0 = time.monotonic()
+            self.start_step = int(state.global_step or 0)
+            eff_bs = args.per_device_train_batch_size * args.gradient_accumulation_steps
+            log_info(
+                f"[Step {self.start_step}/{state.max_steps}] Training started | "
+                f"epochs={args.num_train_epochs} | bs={args.per_device_train_batch_size} "
+                f"| grad_accum={args.gradient_accumulation_steps} (eff_bs={eff_bs})"
+            )
+
+        def on_log(self, args, state, control, logs=None, **kwargs) -> None:  # type: ignore[override]
+            if not logs:
+                return
+            if "eval_loss" in logs or "eval_rewards/accuracies" in logs:
+                ev_loss = logs.get("eval_loss")
+                ev_acc = logs.get("eval_rewards/accuracies")
+                ev_margin = logs.get("eval_rewards/margins")
+                parts = []
+                if ev_loss is not None:
+                    parts.append(f"eval_loss={ev_loss:.4f}")
+                if ev_acc is not None:
+                    parts.append(f"eval_acc={ev_acc:.3f}")
+                if ev_margin is not None:
+                    parts.append(f"eval_margin={ev_margin:.3f}")
+                log_info(f"[Eval @ Step {state.global_step}/{state.max_steps}] {' '.join(parts)}")
+                return
+
+            if "loss" not in logs:
+                return
+            step = int(state.global_step)
+            max_steps = max(1, int(state.max_steps))
+            done = max(1, step - self.start_step)
+            elapsed = time.monotonic() - self.t0
+            sec_per_step = elapsed / done
+            eta_min = (max(0, max_steps - step) * sec_per_step) / 60.0
+            pct = 100.0 * step / max_steps
+
+            loss = logs.get("loss")
+            acc = logs.get("rewards/accuracies")
+            margin = logs.get("rewards/margins")
+            lr = logs.get("learning_rate")
+            metrics = [f"loss={loss:.4f}"]
+            if acc is not None:
+                metrics.append(f"acc={acc:.3f}")
+            if margin is not None:
+                metrics.append(f"margin={margin:.3f}")
+            if lr is not None:
+                metrics.append(f"lr={lr:.2e}")
+            log_info(
+                f"[Step {step}/{max_steps} ({pct:4.1f}%)] {' '.join(metrics)} | "
+                f"{sec_per_step:.1f}s/step | elapsed={elapsed / 60.0:.1f}m | ETA={eta_min:.1f}m"
+            )
+
+        def on_save(self, args, state, control, **kwargs) -> None:  # type: ignore[override]
+            ckpt_dir = out_dir / f"checkpoint-{state.global_step}"
+            log_info(f"[Save @ Step {state.global_step}] Saved local checkpoint -> {ckpt_dir}")
+            if backup_path is not None:
+                sync_checkpoint_to_drive(ckpt_dir, backup_path, keep_last=2)
+
+    return LiveDPOProgressCallback()
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="LoRA DPO fine-tuning for LifeMate Qwen 3.8 4B Planner")
     ap.add_argument(
@@ -207,7 +395,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     ap.add_argument("--load-in-4bit", action="store_true", help="Use QLoRA 4-bit NF4 quantization (for <=24GB VRAM)")
     ap.add_argument("--no-grad-ckpt", action="store_true", help="Disable gradient checkpointing")
-    ap.add_argument("--precompute-ref-log-probs", action="store_true", help="Precompute reference log probs to save VRAM during steps")
+    ap.add_argument("--precompute-ref-log-probs", action="store_true", help="Precompute reference log probs (slow on large datasets; unnecessary with PEFT LoRA)")
+    ap.add_argument("--max-pairs-per-sample", type=int, default=0, help="Keep up to K balanced pairs per sample_id across negative classes (0 = all)")
+    ap.add_argument("--drive-backup-dir", default="", help="Optional Google Drive directory to sync checkpoints and final LoRA adapter")
+    ap.add_argument("--auto-resume", action="store_true", help="Auto-resume from latest valid checkpoint-* in --out-dir or --drive-backup-dir")
     ap.add_argument("--limit", type=int, default=0, help="Limit training rows for quick smoke runs (0 = all)")
     ap.add_argument("--save-steps", type=int, default=100)
     ap.add_argument("--eval-steps", type=int, default=100)
@@ -220,10 +411,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def run_dry_check(args: argparse.Namespace, train_rows: list[dict[str, Any]], val_rows: list[dict[str, Any]], catalog: dict[str, Any]) -> None:
     print("[DRY-RUN] Validation passed.")
     print(f"  Model configured : {args.model or '<UNSET — pass --model <QWEN_MODEL_ID_OR_PATH> when running training>'}")
-    print(f"  Train path       : {args.train_data} ({len(train_rows)} pairs, {len({r['sample_id'] for r in train_rows})} samples)")
+    print(f"  Train path       : {args.train_data} ({len(train_rows)} pairs, {len({r['sample_id'] for r in train_rows})} samples, max_pairs_per_sample={args.max_pairs_per_sample})")
     print(f"  Val path         : {args.val_data} ({len(val_rows)} pairs, {len({r['sample_id'] for r in val_rows})} samples)")
     print(f"  Tool catalog     : {args.tool_catalog} ({len(catalog)} tools)")
-    print(f"  Output adapter   : {args.out_dir}")
+    print(f"  Output adapter   : {args.out_dir}" + (f" (Drive backup: {args.drive_backup_dir})" if args.drive_backup_dir else ""))
     print(f"  Train by intent  : {dict(Counter(r.get('intent', '?') for r in train_rows))}")
     print(f"  Train neg classes: {dict(Counter(r.get('negative_class', '?') for r in train_rows))}")
 
@@ -253,6 +444,13 @@ def main() -> None:
 
     catalog = load_tool_catalog(catalog_path)
     train_rows = load_jsonl(train_path)
+    if args.max_pairs_per_sample and args.max_pairs_per_sample > 0:
+        before_cnt = len(train_rows)
+        train_rows = select_balanced_pairs(train_rows, args.max_pairs_per_sample)
+        log_info(
+            f"Balanced downsampling (--max-pairs-per-sample {args.max_pairs_per_sample}): "
+            f"{before_cnt} -> {len(train_rows)} pairs across {len({r['sample_id'] for r in train_rows})} samples"
+        )
     if args.limit and args.limit > 0:
         train_rows = train_rows[: args.limit]
     val_rows = load_jsonl(val_path)
@@ -266,7 +464,7 @@ def main() -> None:
         print(
             "ERROR: No Qwen model specified. Pass --model <HF_REPO_OR_LOCAL_PATH> "
             "or set QWEN_MODEL_PATH before launching DPO training.\n"
-            "Example: python -m lifemate.planner.train_dpo --model Qwen/Qwen3-4B-Instruct-2507",
+            "Example: python -m lifemate.planner.train_dpo --model empero-ai/Qwen3.8-4B-Distill",
             file=sys.stderr,
         )
         sys.exit(2)
@@ -278,7 +476,11 @@ def main() -> None:
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
     from trl import DPOConfig, DPOTrainer
 
-    print(f"Loading tokenizer & model: {args.model}")
+    if torch.cuda.is_available():
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+
+    log_info(f"[Stage 1/4] Loading tokenizer & model: {args.model} (4bit={args.load_in_4bit})")
     tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -297,7 +499,11 @@ def main() -> None:
         )
         model_kwargs["device_map"] = "auto"
 
-    model = AutoModelForCausalLM.from_pretrained(args.model, **model_kwargs)
+    try:
+        model = AutoModelForCausalLM.from_pretrained(args.model, attn_implementation="sdpa", **model_kwargs)
+    except (TypeError, ValueError) as exc:
+        log_info(f"Note: attn_implementation='sdpa' unavailable ({exc}); falling back to default attention.")
+        model = AutoModelForCausalLM.from_pretrained(args.model, **model_kwargs)
     if args.load_in_4bit:
         model = prepare_model_for_kbit_training(model)
 
@@ -325,15 +531,19 @@ def main() -> None:
             model.print_trainable_parameters()
             peft_config = None  # already wrapped
 
-    print("Formatting DPO train & val datasets with Qwen chat template + tool schemas...")
-    train_formatted = [
-        format_row_for_dpo(r, catalog, tokenizer, args.think, args.max_prompt_length, wrap_think=args.wrap_think)
-        for r in train_rows
-    ]
+    log_info(f"[Stage 2/4] Formatting {len(train_rows)} train + {len(val_rows)} val pairs with Qwen chat template...")
+    train_formatted: list[dict[str, str]] = []
+    for idx, r in enumerate(train_rows, 1):
+        train_formatted.append(
+            format_row_for_dpo(r, catalog, tokenizer, args.think, args.max_prompt_length, wrap_think=args.wrap_think)
+        )
+        if idx % 500 == 0 or idx == len(train_rows):
+            log_info(f"  Formatted train pairs: {idx}/{len(train_rows)}")
     val_formatted = [
         format_row_for_dpo(r, catalog, tokenizer, args.think, args.max_prompt_length, wrap_think=args.wrap_think)
         for r in val_rows
     ]
+    log_info(f"  Formatted val pairs  : {len(val_formatted)}/{len(val_rows)}")
 
     train_ds = Dataset.from_list(train_formatted)
     val_ds = Dataset.from_list(val_formatted)
@@ -351,6 +561,7 @@ def main() -> None:
         "weight_decay": args.weight_decay,
         "lr_scheduler_type": "cosine",
         "logging_steps": args.logging_steps,
+        "logging_first_step": True,
         "eval_strategy": "steps",
         "eval_steps": args.eval_steps,
         "save_strategy": "steps",
@@ -389,14 +600,24 @@ def main() -> None:
     elif "tokenizer" in trainer_sig:
         trainer_kwargs["tokenizer"] = tokenizer
 
-    trainer = DPOTrainer(**trainer_kwargs)
-    trainer.train()
-
     out_path = Path(args.out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
+    log_info(
+        f"[Stage 3/4] Initializing DPOTrainer & tokenizing datasets "
+        f"(precompute_ref={args.precompute_ref_log_probs}, save_steps={args.save_steps}, eval_steps={args.eval_steps})..."
+    )
+    trainer = DPOTrainer(**trainer_kwargs)
+    trainer.add_callback(build_live_callback(out_path, args.drive_backup_dir))
+
+    resume_ckpt = resolve_resume_checkpoint(out_path, args.drive_backup_dir) if args.auto_resume else None
+    log_info(f"[Stage 4/4] Entering trainer.train(resume_from_checkpoint={resume_ckpt})...")
+    trainer.train(resume_from_checkpoint=resume_ckpt)
+
     trainer.save_model(str(out_path))
     tokenizer.save_pretrained(str(out_path))
-    print(f"Saved DPO LoRA adapter & tokenizer -> {out_path}")
+    log_info(f"Saved DPO LoRA adapter & tokenizer -> {out_path}")
+    if args.drive_backup_dir:
+        sync_final_adapter_to_drive(out_path, Path(args.drive_backup_dir))
 
 
 if __name__ == "__main__":

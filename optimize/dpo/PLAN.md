@@ -86,6 +86,17 @@ nohup python -u -X utf8 -m lifemate.planner.train_dpo \
 - **Test (`test_ids.txt`, N=100):** Mean Score = `0.4394` (`act=0.4954`, `ask=0.0571`, `empty=0.5714`; `held_out_test=0.4804`, `seen_train=0.3007`).
 - Cell 6A của notebook tự khôi phục hai file baseline trên từ `optimize/dpo/baseline_runs/` (hoặc Google Drive) và bỏ qua bước chạy vLLM Baseline để dành toàn bộ GPU cho Train DPO.
 
+**Trạng thái & Kiểm định `checkpoint-100` (Giai đoạn 1 — Step 100/127, ~78.9% Epoch 1):**
+- **Tiến độ & Dữ liệu:** `global_step = 100 / 127` (`epoch = 0.7893`, `21,430,799` tokens đã học, còn **27 step** nữa hoàn tất Epoch 1).
+- **Diễn biến Train Loss:** giảm đều và hội tụ sạch — Step 1 (`0.6931`) -> Step 10 (`0.5821`) -> Step 20 (`0.0988`) -> Step 50 (`0.0042`) -> Step 100 (`0.00125`).
+- **Held-out Validation (`dpo_val.jsonl`, 248 cặp):**
+  - Step 50: `eval_loss = 0.00673`, `eval_rewards/accuracies = 1.0`, `eval_rewards/margins = +7.422`, `eval_mean_token_accuracy = 0.6757`, `eval_entropy = 1.1091`.
+  - Step 100: `eval_loss = 0.00390`, `eval_rewards/accuracies = 1.0`, `eval_rewards/margins = +8.023`, `eval_mean_token_accuracy = 0.6787`, `eval_entropy = 1.1101` (entropy giữ nguyên ổn định so với Step 1 `1.1103`, không có dấu hiệu collapse).
+- **Tính toàn vẹn trọng số & trạng thái trainer:** `adapter_model.safetensors` (`128/128` nhánh `lora_B` khác 0, `0` NaN/Inf), `optimizer.pt` (256 tensor states), `scheduler.pt` (`last_epoch: 100`), và `training_args.bin` (`bf16=True`, `per_device_train_batch_size=1`, `gradient_accumulation_steps=16`, `learning_rate=5e-6`, `save_steps=10`, `eval_steps=50`) đều đầy đủ & hợp lệ.
+- **Cách chạy tiếp nốt 27 step (Step 101 -> 127) trên Google Colab:**
+  - Để thư mục `checkpoint-100` trên Google Drive (`/content/drive/MyDrive/ZAIC_2026_runs/checkpoints/planner_dpo_qwen38_lora/checkpoint-100`, hoặc đặt tại `/content/drive/MyDrive/ZAIC_2026_runs/` / `/content/drive/MyDrive/` kể cả thư mục tải về dạng `checkpoint-100-*/checkpoint-100`).
+  - Mở `notebooks/colab_train_dpo_qwen38_4b.ipynb` và chạy **Cell 6B**: `--auto-resume` sẽ tự động tìm `checkpoint-100`, làm phẳng nếu lồng thư mục, đồng bộ `train_batch_size=1, grad_accum=16` (kể cả khi đổi sang G4/A100) và tiếp tục train từ Step 100 -> 127 (nếu thiếu `optimizer.pt`, script tự fallback sang `--resume-from-lora`). Cell 7 & Cell 9 cũng tự trích xuất adapter từ `checkpoint-*` cao nhất nếu chưa có file ở thư mục gốc.
+
 **Đo lường Sau DPO (Giai đoạn 1):**
 ```bash
 # 1. Sau DPO Giai đoạn 1 (Baseline đã có sẵn ở optimize/dpo/baseline_runs/)

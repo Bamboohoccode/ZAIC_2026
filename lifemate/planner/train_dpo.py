@@ -205,15 +205,37 @@ def select_balanced_pairs(rows: list[dict[str, Any]], max_per_sample: int) -> li
     return selected
 
 
-def _list_valid_checkpoints(directory: Path) -> list[tuple[int, Path]]:
-    if not directory.exists():
+DEFAULT_DRIVE_RESUME_DIRS = (
+    "/content/drive/MyDrive/ZAIC_2026_runs/checkpoints/planner_dpo_qwen38_lora",
+    "/content/drive/MyDrive/ZAIC_2026_runs",
+    "/content/drive/MyDrive",
+)
+
+
+def _is_valid_ckpt_dir(p: Path) -> int | None:
+    if p.is_dir() and p.name.startswith("checkpoint-"):
+        suffix = p.name.split("-", 1)[1]
+        if suffix.isdigit() and (p / "trainer_state.json").exists():
+            return int(suffix)
+    return None
+
+
+def _list_valid_checkpoints(directory: Path, nested: bool = False) -> list[tuple[int, Path]]:
+    """Find valid checkpoint-<step> directories (optionally inspecting downloaded checkpoint-* wrapper dirs)."""
+    if not directory.exists() or not directory.is_dir():
         return []
     found: list[tuple[int, Path]] = []
     for p in directory.iterdir():
-        if p.is_dir() and p.name.startswith("checkpoint-"):
-            suffix = p.name.split("-", 1)[1]
-            if suffix.isdigit() and (p / "trainer_state.json").exists():
-                found.append((int(suffix), p))
+        if p.name.startswith(".") or not p.is_dir():
+            continue
+        step = _is_valid_ckpt_dir(p)
+        if step is not None:
+            found.append((step, p))
+        elif nested and "checkpoint-" in p.name:
+            for sub in p.iterdir():
+                sub_step = _is_valid_ckpt_dir(sub)
+                if sub_step is not None:
+                    found.append((sub_step, sub))
     return sorted(found, key=lambda item: item[0])
 
 
@@ -228,7 +250,15 @@ def _copy_dir_safe(src: Path, dst: Path) -> None:
     tmp_dst.rename(dst)
 
 
-ADAPTER_WEIGHT_FILES = ("adapter_config.json", "adapter_model.safetensors", "adapter_model.bin", "README.md")
+ADAPTER_WEIGHT_FILES = (
+    "adapter_config.json",
+    "adapter_model.safetensors",
+    "adapter_model.bin",
+    "README.md",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "chat_template.jinja",
+)
 
 
 def _copy_file_atomic(src: Path, dst: Path) -> None:
@@ -238,12 +268,31 @@ def _copy_file_atomic(src: Path, dst: Path) -> None:
     os.replace(tmp_dst, dst)
 
 
+def _checkpoint_state_info(ckpt_dir: Path) -> dict[str, Any] | None:
+    ts_path = ckpt_dir / "trainer_state.json"
+    if not ts_path.is_file():
+        return None
+    try:
+        st = json.loads(ts_path.read_text(encoding="utf-8"))
+        step = int(st.get("global_step", 0))
+        max_steps = max(1, int(st.get("max_steps", 0) or step or 1))
+        return {
+            "global_step": step,
+            "max_steps": max_steps,
+            "progress_pct": round(100.0 * step / max_steps, 2),
+            "checkpoint": ckpt_dir.name,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        }
+    except Exception:
+        return None
+
+
 def export_lora_weights_and_info(
     local_ckpt: Path,
     target_dir: Path,
     state_info: dict[str, Any] | None = None,
 ) -> int:
-    """Copy standalone LoRA adapter weights and checkpoint metadata to target_dir root."""
+    """Copy standalone LoRA adapter weights, tokenizer files, and checkpoint metadata to target_dir root."""
     if not local_ckpt.exists():
         return 0
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -303,26 +352,99 @@ def sync_final_adapter_to_drive(out_dir: Path, drive_backup_dir: Path) -> None:
         log_info(f"Warning: failed to sync final adapter to Drive ({exc})")
 
 
-def resolve_resume_checkpoint(out_dir: Path, drive_backup_dir: str) -> str | None:
-    """Restore newer checkpoint-* from Drive if needed and return the highest valid local checkpoint path."""
-    local_ckpts = _list_valid_checkpoints(out_dir)
+def resolve_resume_checkpoint(
+    out_dir: Path,
+    drive_backup_dir: str,
+    extra_search_dirs: tuple[str, ...] = DEFAULT_DRIVE_RESUME_DIRS,
+) -> str | None:
+    """Find highest checkpoint-* across out_dir, drive_backup_dir, and fallback Drive dirs; restore & export weights."""
+    local_ckpts = _list_valid_checkpoints(out_dir, nested=True)
     latest_local_step = local_ckpts[-1][0] if local_ckpts else -1
 
+    drive_candidates: list[tuple[int, Path]] = []
+    seen_roots: set[Path] = set()
+    search_dirs: list[Path] = []
     if drive_backup_dir:
-        drive_path = Path(drive_backup_dir)
-        drive_ckpts = _list_valid_checkpoints(drive_path)
-        if drive_ckpts and drive_ckpts[-1][0] > latest_local_step:
-            top_step, top_drive_ckpt = drive_ckpts[-1]
-            restored = out_dir / top_drive_ckpt.name
-            log_info(f"Restoring newer Drive checkpoint checkpoint-{top_step} -> {restored}")
-            _copy_dir_safe(top_drive_ckpt, restored)
-            local_ckpts = _list_valid_checkpoints(out_dir)
+        search_dirs.append(Path(drive_backup_dir))
+    for d in extra_search_dirs:
+        p = Path(d)
+        if p.exists():
+            search_dirs.append(p)
+
+    for root_dir in search_dirs:
+        resolved = root_dir.resolve()
+        if resolved in seen_roots:
+            continue
+        seen_roots.add(resolved)
+        drive_candidates.extend(_list_valid_checkpoints(root_dir, nested=True))
+
+    drive_candidates.sort(key=lambda item: item[0])
+    if drive_candidates and drive_candidates[-1][0] > latest_local_step:
+        top_step, top_drive_ckpt = drive_candidates[-1]
+        restored = out_dir / f"checkpoint-{top_step}"
+        log_info(f"Restoring newer checkpoint checkpoint-{top_step} from {top_drive_ckpt} -> {restored}")
+        _copy_dir_safe(top_drive_ckpt, restored)
+        info = _checkpoint_state_info(restored)
+        try:
+            export_lora_weights_and_info(restored, out_dir, info)
+            if drive_backup_dir:
+                export_lora_weights_and_info(restored, Path(drive_backup_dir), info)
+        except Exception as exc:
+            log_info(f"Warning: failed exporting weights during restore ({exc})")
+        local_ckpts = _list_valid_checkpoints(out_dir, nested=True)
 
     if not local_ckpts:
         return None
     best_step, best_path = local_ckpts[-1]
+    if best_path.parent.resolve() != out_dir.resolve():
+        # Flatten nested local checkpoint (e.g. out_dir/checkpoint-100-.../checkpoint-100) into out_dir/checkpoint-<step>
+        flat_dst = out_dir / f"checkpoint-{best_step}"
+        log_info(f"Normalizing nested local checkpoint {best_path} -> {flat_dst}")
+        _copy_dir_safe(best_path, flat_dst)
+        best_path = flat_dst
     log_info(f"Auto-resuming DPO training from {best_path} (step {best_step})")
     return str(best_path)
+
+
+def resolve_resume_settings(
+    out_dir: Path,
+    drive_backup_dir: str,
+    bs: int,
+    grad_accum: int,
+    resume_from_lora: str,
+    auto_resume: bool,
+    extra_search_dirs: tuple[str, ...] = DEFAULT_DRIVE_RESUME_DIRS,
+) -> tuple[str | None, int, int, str]:
+    """Resolve resume checkpoint, align batch size for exact step skipping, or fall back to weights-only LoRA init."""
+    if not auto_resume:
+        return None, bs, grad_accum, resume_from_lora
+    ckpt = resolve_resume_checkpoint(out_dir, drive_backup_dir, extra_search_dirs=extra_search_dirs)
+    if ckpt is None:
+        return None, bs, grad_accum, resume_from_lora
+
+    ckpt_path = Path(ckpt)
+    has_optimizer = (ckpt_path / "optimizer.pt").is_file()
+    if not has_optimizer:
+        if (ckpt_path / "adapter_config.json").is_file() and not resume_from_lora:
+            resume_from_lora = ckpt
+            log_info(f"Note: {ckpt_path.name} has no optimizer.pt (weights-only); initializing via --resume-from-lora.")
+        return None, bs, grad_accum, resume_from_lora
+
+    try:
+        st = json.loads((ckpt_path / "trainer_state.json").read_text(encoding="utf-8"))
+        ckpt_bs = int(st.get("train_batch_size", 0) or 0)
+        if ckpt_bs > 0 and ckpt_bs != bs:
+            eff_bs = bs * grad_accum
+            grad_accum = max(1, eff_bs // ckpt_bs)
+            bs = ckpt_bs
+            log_info(
+                f"Preserving checkpoint per_device_train_batch_size={bs} "
+                f"(grad_accum={grad_accum}, eff_bs={bs * grad_accum}) to match {ckpt_path.name}"
+            )
+    except Exception as exc:
+        log_info(f"Warning: could not read train_batch_size from {ckpt_path.name} ({exc})")
+
+    return ckpt, bs, grad_accum, resume_from_lora
 
 
 def build_live_callback(out_dir: Path, drive_backup_dir: str) -> Any:
@@ -559,6 +681,17 @@ def main() -> None:
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
 
+    out_path = Path(args.out_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+    resume_ckpt, args.bs, args.grad_accum, args.resume_from_lora = resolve_resume_settings(
+        out_path,
+        args.drive_backup_dir,
+        args.bs,
+        args.grad_accum,
+        args.resume_from_lora,
+        args.auto_resume,
+    )
+
     log_info(f"[Stage 1/4] Loading tokenizer & model: {args.model} (4bit={args.load_in_4bit})")
     tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
     if tokenizer.pad_token is None:
@@ -675,8 +808,6 @@ def main() -> None:
     elif "tokenizer" in trainer_sig:
         trainer_kwargs["tokenizer"] = tokenizer
 
-    out_path = Path(args.out_dir)
-    out_path.mkdir(parents=True, exist_ok=True)
     tokenizer.save_pretrained(str(out_path))
     if args.drive_backup_dir:
         try:
@@ -693,7 +824,6 @@ def main() -> None:
         trainer.model.print_trainable_parameters()
     trainer.add_callback(build_live_callback(out_path, args.drive_backup_dir))
 
-    resume_ckpt = resolve_resume_checkpoint(out_path, args.drive_backup_dir) if args.auto_resume else None
     log_info(f"[Stage 4/4] Entering trainer.train(resume_from_checkpoint={resume_ckpt})...")
     trainer.train(resume_from_checkpoint=resume_ckpt)
 

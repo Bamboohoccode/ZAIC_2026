@@ -353,6 +353,28 @@ def build_live_callback(out_dir: Path, drive_backup_dir: str) -> Any:
     return LiveDPOProgressCallback()
 
 
+def disable_incompatible_torchao() -> None:
+    """Bypass PEFT's torchao check when stale torchao (<0.16.0, e.g. Colab 0.10.0) raises ImportError."""
+    import peft.import_utils as peft_import_utils
+
+    orig_fn = getattr(peft_import_utils, "is_torchao_available", None)
+    if orig_fn is None:
+        return
+    try:
+        orig_fn()
+        return
+    except ImportError as exc:
+        log_info(f"Note: ignoring incompatible torchao ({exc}); using standard PyTorch linear layers for LoRA.")
+
+    def _no_torchao() -> bool:
+        return False
+
+    peft_import_utils.is_torchao_available = _no_torchao
+    for mod_name, mod in list(sys.modules.items()):
+        if mod is not None and mod_name.startswith("peft") and getattr(mod, "is_torchao_available", None) is orig_fn:
+            setattr(mod, "is_torchao_available", _no_torchao)
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="LoRA DPO fine-tuning for LifeMate Qwen 3.8 4B Planner")
     ap.add_argument(
@@ -472,9 +494,11 @@ def main() -> None:
     # Heavy ML imports are deferred until actual training so --dry-run stays instant without GPU packages.
     import torch
     from datasets import Dataset
-    from peft import LoraConfig, PeftModel, get_peft_model, prepare_model_for_kbit_training
+    from peft import LoraConfig, PeftModel, prepare_model_for_kbit_training
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
     from trl import DPOConfig, DPOTrainer
+
+    disable_incompatible_torchao()
 
     if torch.cuda.is_available():
         torch.backends.cuda.matmul.allow_tf32 = True
@@ -526,10 +550,6 @@ def main() -> None:
             task_type="CAUSAL_LM",
             target_modules=target_modules,
         )
-        if not args.load_in_4bit:
-            model = get_peft_model(model, peft_config)
-            model.print_trainable_parameters()
-            peft_config = None  # already wrapped
 
     log_info(f"[Stage 2/4] Formatting {len(train_rows)} train + {len(val_rows)} val pairs with Qwen chat template...")
     train_formatted: list[dict[str, str]] = []
@@ -607,6 +627,8 @@ def main() -> None:
         f"(precompute_ref={args.precompute_ref_log_probs}, save_steps={args.save_steps}, eval_steps={args.eval_steps})..."
     )
     trainer = DPOTrainer(**trainer_kwargs)
+    if hasattr(trainer.model, "print_trainable_parameters"):
+        trainer.model.print_trainable_parameters()
     trainer.add_callback(build_live_callback(out_path, args.drive_backup_dir))
 
     resume_ckpt = resolve_resume_checkpoint(out_path, args.drive_backup_dir) if args.auto_resume else None

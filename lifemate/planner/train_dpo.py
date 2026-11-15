@@ -228,18 +228,63 @@ def _copy_dir_safe(src: Path, dst: Path) -> None:
     tmp_dst.rename(dst)
 
 
-def sync_checkpoint_to_drive(local_ckpt: Path, drive_backup_dir: Path, keep_last: int = 2) -> None:
-    """Copy a completed checkpoint-* folder to Google Drive and prune older backups."""
+ADAPTER_WEIGHT_FILES = ("adapter_config.json", "adapter_model.safetensors", "adapter_model.bin", "README.md")
+
+
+def _copy_file_atomic(src: Path, dst: Path) -> None:
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp_dst = dst.parent / f".tmp_{dst.name}"
+    shutil.copy2(src, tmp_dst)
+    os.replace(tmp_dst, dst)
+
+
+def export_lora_weights_and_info(
+    local_ckpt: Path,
+    target_dir: Path,
+    state_info: dict[str, Any] | None = None,
+) -> int:
+    """Copy standalone LoRA adapter weights and checkpoint metadata to target_dir root."""
+    if not local_ckpt.exists():
+        return 0
+    target_dir.mkdir(parents=True, exist_ok=True)
+    copied = 0
+    for fname in ADAPTER_WEIGHT_FILES:
+        src_file = local_ckpt / fname
+        if src_file.is_file():
+            _copy_file_atomic(src_file, target_dir / fname)
+            copied += 1
+    if state_info is not None:
+        info_path = target_dir / "latest_checkpoint_info.json"
+        tmp_info = target_dir / ".tmp_latest_checkpoint_info.json"
+        tmp_info.write_text(json.dumps(state_info, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        os.replace(tmp_info, info_path)
+    return copied
+
+
+def sync_checkpoint_to_drive(
+    local_ckpt: Path,
+    drive_backup_dir: Path,
+    out_dir: Path | None = None,
+    state_info: dict[str, Any] | None = None,
+    keep_last: int = 2,
+) -> None:
+    """Export standalone LoRA weights locally & to Drive, back up full checkpoint-*, and prune older backups."""
     if not local_ckpt.exists():
         return
+    if out_dir is not None:
+        try:
+            export_lora_weights_and_info(local_ckpt, out_dir, state_info)
+        except Exception as exc:
+            log_info(f"Warning: failed to export local LoRA weights from {local_ckpt.name} ({exc})")
     try:
         drive_backup_dir.mkdir(parents=True, exist_ok=True)
         dst_ckpt = drive_backup_dir / local_ckpt.name
         _copy_dir_safe(local_ckpt, dst_ckpt)
+        copied = export_lora_weights_and_info(local_ckpt, drive_backup_dir, state_info)
         ckpts = _list_valid_checkpoints(drive_backup_dir)
         for _, old_ckpt in ckpts[:-keep_last] if len(ckpts) > keep_last else []:
             shutil.rmtree(old_ckpt, ignore_errors=True)
-        log_info(f"Synced {local_ckpt.name} -> {dst_ckpt}")
+        log_info(f"Synced {local_ckpt.name} + {copied} adapter files -> {drive_backup_dir}")
     except Exception as exc:
         log_info(f"Warning: failed to sync {local_ckpt.name} to Drive ({exc})")
 
@@ -346,9 +391,19 @@ def build_live_callback(out_dir: Path, drive_backup_dir: str) -> Any:
 
         def on_save(self, args, state, control, **kwargs) -> None:  # type: ignore[override]
             ckpt_dir = out_dir / f"checkpoint-{state.global_step}"
-            log_info(f"[Save @ Step {state.global_step}] Saved local checkpoint -> {ckpt_dir}")
+            max_steps = max(1, int(state.max_steps))
+            state_info = {
+                "global_step": int(state.global_step),
+                "max_steps": max_steps,
+                "progress_pct": round(100.0 * int(state.global_step) / max_steps, 2),
+                "checkpoint": ckpt_dir.name,
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            }
+            log_info(f"[Save @ Step {state.global_step}/{max_steps} ({state_info['progress_pct']:.1f}%)] Saved checkpoint -> {ckpt_dir}")
             if backup_path is not None:
-                sync_checkpoint_to_drive(ckpt_dir, backup_path, keep_last=2)
+                sync_checkpoint_to_drive(ckpt_dir, backup_path, out_dir=out_dir, state_info=state_info, keep_last=2)
+            else:
+                export_lora_weights_and_info(ckpt_dir, out_dir, state_info)
 
     return LiveDPOProgressCallback()
 
@@ -422,8 +477,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     ap.add_argument("--drive-backup-dir", default="", help="Optional Google Drive directory to sync checkpoints and final LoRA adapter")
     ap.add_argument("--auto-resume", action="store_true", help="Auto-resume from latest valid checkpoint-* in --out-dir or --drive-backup-dir")
     ap.add_argument("--limit", type=int, default=0, help="Limit training rows for quick smoke runs (0 = all)")
-    ap.add_argument("--save-steps", type=int, default=100)
-    ap.add_argument("--eval-steps", type=int, default=100)
+    ap.add_argument("--save-steps", type=int, default=10)
+    ap.add_argument("--eval-steps", type=int, default=50)
     ap.add_argument("--logging-steps", type=int, default=10)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--dry-run", action="store_true", help="Validate data paths, schema, and args without loading model weights")
@@ -587,7 +642,7 @@ def main() -> None:
         "save_strategy": "steps",
         "save_steps": args.save_steps,
         "save_total_limit": 2,
-        "load_best_model_at_end": True,
+        "load_best_model_at_end": bool(args.eval_steps > 0 and args.save_steps > 0 and args.save_steps % args.eval_steps == 0),
         "metric_for_best_model": "eval_rewards/accuracies",
         "greater_is_better": True,
         "max_length": args.max_length,
@@ -622,6 +677,13 @@ def main() -> None:
 
     out_path = Path(args.out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
+    tokenizer.save_pretrained(str(out_path))
+    if args.drive_backup_dir:
+        try:
+            Path(args.drive_backup_dir).mkdir(parents=True, exist_ok=True)
+            tokenizer.save_pretrained(args.drive_backup_dir)
+        except Exception as exc:
+            log_info(f"Warning: failed to pre-save tokenizer to Drive ({exc})")
     log_info(
         f"[Stage 3/4] Initializing DPOTrainer & tokenizing datasets "
         f"(precompute_ref={args.precompute_ref_log_probs}, save_steps={args.save_steps}, eval_steps={args.eval_steps})..."

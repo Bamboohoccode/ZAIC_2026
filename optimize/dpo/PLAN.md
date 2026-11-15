@@ -44,35 +44,37 @@ Sử dụng bộ dữ liệu đã được sinh và kiểm chứng `gold_hash_ve
   - `hallucinated_optional_args`: **724** (Tự điền tham số tùy chọn hoặc làm biến dạng literal)
   - `premature_write_or_ask`: **372** (Nhảy cóc gọi tool ghi hoặc hỏi sớm khi chưa gọi tool đọc)
 
-**Lệnh huấn luyện Giai đoạn 1 (đã tối ưu tốc độ + live log + auto-resume Drive):**
+**Lệnh huấn luyện Giai đoạn 1 (tối ưu tốc độ + nohup + lưu checkpoint & weight LoRA mỗi 10 step):**
 ```bash
 # Trên G4 96GB / A100 (bf16 LoRA thuần, tắt --precompute-ref-log-probs để PEFT toggle adapter tức thì)
-python -u -X utf8 -m lifemate.planner.train_dpo \
+nohup python -u -X utf8 -m lifemate.planner.train_dpo \
   --model empero-ai/Qwen3.8-4B-Distill \
   --train-data optimize/dpo/dataset/dpo_train.jsonl \
   --val-data optimize/dpo/dataset/dpo_val.jsonl \
   --out-dir checkpoints/planner_dpo_qwen38_lora \
   --epochs 1.0 --lr 5e-6 --beta 0.1 --rank 16 --wrap-think \
   --max-pairs-per-sample 2 --max-prompt-length 9216 --max-length 10240 \
-  --bs 2 --grad-accum 8 --save-steps 50 --eval-steps 50 --logging-steps 2 \
-  --auto-resume --drive-backup-dir /content/drive/MyDrive/ZAIC_2026_runs/checkpoints/planner_dpo_qwen38_lora
+  --bs 2 --grad-accum 8 --save-steps 10 --eval-steps 50 --logging-steps 2 \
+  --auto-resume --drive-backup-dir /content/drive/MyDrive/ZAIC_2026_runs/checkpoints/planner_dpo_qwen38_lora \
+  > /content/drive/MyDrive/ZAIC_2026_runs/train_dpo_s1.log 2>&1 &
 
-# Trên L4 22.5GB (QLoRA 4-bit + TF32 + SDPA + --auto-resume)
-python -u -X utf8 -m lifemate.planner.train_dpo \
+# Trên L4 22.5GB (QLoRA 4-bit + TF32 + SDPA + --auto-resume + lưu weight mỗi 10 step)
+nohup python -u -X utf8 -m lifemate.planner.train_dpo \
   --model empero-ai/Qwen3.8-4B-Distill \
   --train-data optimize/dpo/dataset/dpo_train.jsonl \
   --val-data optimize/dpo/dataset/dpo_val.jsonl \
   --out-dir checkpoints/planner_dpo_qwen38_lora \
   --epochs 1.0 --lr 5e-6 --beta 0.1 --rank 16 --wrap-think \
   --max-pairs-per-sample 2 --max-prompt-length 9216 --max-length 10240 \
-  --load-in-4bit --bs 1 --grad-accum 16 --save-steps 50 --eval-steps 50 --logging-steps 2 \
-  --auto-resume --drive-backup-dir /content/drive/MyDrive/ZAIC_2026_runs/checkpoints/planner_dpo_qwen38_lora
+  --load-in-4bit --bs 1 --grad-accum 16 --save-steps 10 --eval-steps 50 --logging-steps 2 \
+  --auto-resume --drive-backup-dir /content/drive/MyDrive/ZAIC_2026_runs/checkpoints/planner_dpo_qwen38_lora \
+  > /content/drive/MyDrive/ZAIC_2026_runs/train_dpo_s1.log 2>&1 &
 ```
 
-> **Bài học từ phiên Colab L4 >500 phút (đã khắc phục triệt để):**
-> 1. **`os.system()` nuốt hoàn toàn stdout trên IPython/Colab:** Cell 6B trước đây dùng `os.system()` nên toàn bộ log Python/HF bị đẩy ra file descriptor ngầm của kernel thay vì stream lên cell UI. Nay mọi cell đều dùng `subprocess.Popen(..., bufsize=1)` kèm `-u` (`PYTHONUNBUFFERED=1`), stream từng dòng theo thời gian thực và ghi song song vào `/content/drive/MyDrive/ZAIC_2026_runs/train_dpo_s1.log`.
-> 2. **`--precompute-ref-log-probs` gây treo trước Step 1:** Trên 4,798 cặp dài 6K–9K token, cờ này ép model chạy 9,596 lượt forward reference trước khi bước vào Step 1. Tắt cờ này để `DPOTrainer` tự tắt/bật LoRA adapter (`ref_model=None`) không tốn thêm VRAM và vào Step 1 ngay sau tokenization.
-> 3. **Giảm thời gian L4 xuống ~45–60 phút:** Bật `--max-pairs-per-sample 2` (`4,798 -> 2,027` cặp cân bằng, giữ nguyên 100% 1,087 mẫu train & 5 nhóm lỗi), `--epochs 1.0`, TF32 (`allow_tf32=True`), `attn_implementation="sdpa"`, và `--save-steps 50 --auto-resume --drive-backup-dir ...` để khôi phục ngay nếu Colab thu hồi GPU.
+> **Bài học từ phiên Colab L4 >500 phút & ngắt kết nối giữa chừng (đã khắc phục triệt để):**
+> 1. **Chạy nền qua `nohup` + auto-reattach:** Cell 6B & 8B chạy `nohup` (detached session, ghi log thẳng vào Drive `/content/drive/MyDrive/ZAIC_2026_runs/train_dpo_s1.log`) kèm tail log trực tiếp. Nếu rớt mạng/mất kết nối tab trình duyệt mà VM vẫn sống, chạy lại cell sẽ tự gắn vào PID đang chạy mà không train lại từ đầu.
+> 2. **Lưu checkpoint + weight LoRA hoàn chỉnh mỗi 10 step (~8%):** Với 127 step (1 epoch trên 2,027 cặp), `--save-steps 10` xuất cả `checkpoint-<step>` lẫn weight LoRA dùng ngay (`adapter_config.json`, `adapter_model.safetensors`, `latest_checkpoint_info.json`) lên Google Drive sau mỗi 10 step; bật `--auto-resume` sẽ tự khôi phục từ checkpoint mới nhất trên Drive nếu Colab bị thu hồi VM.
+> 3. **Tắt `--precompute-ref-log-probs` & bật TF32/SDPA:** Trên PEFT LoRA, `DPOTrainer` tự tắt/bật adapter (`ref_model=None`) không tốn thêm VRAM và vào Step 1 ngay lập tức. Kết hợp `--max-pairs-per-sample 2 --epochs 1.0` (`4,798 -> 2,027` cặp phủ đủ 1,087 mẫu train & 5 nhóm lỗi) giảm thời gian L4 xuống ~45–60 phút (G4/A100 ~15–30 phút).
 
 > **Lưu ý đặc thù về `<think>` của `empero-ai/Qwen3.8-4B-Distill`:**
 > `chat_template.jinja` của `empero-ai/Qwen3.8-4B-Distill` chèn sẵn `<think>\n` ở cuối `add_generation_prompt=True` (hoặc `<think>\n\n</think>\n\n` khi truyền `enable_thinking=False`).
@@ -120,12 +122,12 @@ Vì prompt chứa danh sách JSON Schema các tool dài **5.9K–8.5K tokens** (
 | Runtime Colab | Bộ nhớ / Kiến trúc | Hỗ trợ `bf16` & CUDA/vLLM | Cấu hình DPO khuyến nghị (`--max-pairs-per-sample 2 --epochs 1.0`, tắt `precompute_ref`) | Thời gian ước tính (Train) | Khuyến nghị |
 |---|---|---:|---|---|---|
 | **G4 (`RTX PRO 6000` Blackwell)** | **96 GB GDDR7** | Có (Blackwell, native `bf16`) | `bf16` LoRA thuần (tắt 4-bit), `--bs 2 --grad-accum 8`, TF32+SDPA | **~15–20 phút** | **Khuyên dùng #1 (khi A100 hết slot)** — Dư VRAM, chạy cực nhanh cả DPO lẫn vLLM |
-| **L4** | **22.5 GB VRAM** | Có (Ada SM89, native `bf16`) | QLoRA `--load-in-4bit --bs 1 --grad-accum 16`, TF32+SDPA, `--auto-resume` | **~45–60 phút** | **Lựa chọn #2 (Tiết kiệm Compute Units)** — Auto-backup Drive mỗi 50 step |
+| **L4** | **22.5 GB VRAM** | Có (Ada SM89, native `bf16`) | QLoRA `--load-in-4bit --bs 1 --grad-accum 16`, TF32+SDPA, `--auto-resume` | **~45–60 phút** | **Lựa chọn #2 (Tiết kiệm Compute Units)** — Auto-backup Drive mỗi 10 step |
 | **A100** | **40 GB / 80 GB VRAM** | Có (Ampere SM80) | `bf16` LoRA thuần, `--bs 1 --grad-accum 16`, TF32+SDPA | **~20–30 phút** | Rất tốt nhưng hiện Colab đang hết suất (nếu trống lại vẫn dùng tốt) |
 | **T4** | **15–16 GB VRAM** | **Không** (Turing SM75, chỉ `fp16`) | Dễ OOM / quá chậm khi train DPO trên context 6K–9K tokens | > 4 giờ / dễ OOM | **KHÔNG dùng T4 để train DPO** (chỉ dùng cho inference vLLM nếu cần) |
 | **TPU (`v5e-1` / `v6e-1`)** | **16–32 GB HBM** (XLA) | **Không** (không có CUDA / vLLM / `bitsandbytes`) | Phải viết lại toàn bộ trainer sang `torch_xla` + biên dịch XLA lại theo độ dài prompt biến thiên | Không tương thích | **KHÔNG dùng TPU** — Stack hiện tại (`trl`/`peft`/`vllm`) chỉ chạy trên NVIDIA CUDA GPU |
 
-> **Mẹo triển khai thực tế:** Mở `notebooks/colab_train_dpo_qwen38_4b.ipynb`, notebook tự nhận diện G4 / A100 / L4 / T4 (và báo lỗi rõ nếu chọn nhầm TPU), tự điền sẵn cờ `--load-in-4bit`, `--bs`, `--grad-accum`, bỏ qua bước chạy Baseline nếu `optimize/dpo/baseline_runs/` đã đủ mẫu, stream log từng step qua `subprocess.Popen`, và sao lưu/khôi phục checkpoint qua Google Drive.
+> **Mẹo triển khai thực tế:** Mở `notebooks/colab_train_dpo_qwen38_4b.ipynb`, notebook tự nhận diện G4 / A100 / L4 / T4 (và báo lỗi rõ nếu chọn nhầm TPU), tự điền sẵn cờ `--load-in-4bit`, `--bs`, `--grad-accum`, bỏ qua bước chạy Baseline nếu `optimize/dpo/baseline_runs/` đã đủ mẫu, chạy nền qua `nohup` (tự re-attach log nếu mất kết nối UI), và tự lưu checkpoint + weight LoRA lên Google Drive mỗi 10 step để `--auto-resume` bất kỳ lúc nào.
 
 ---
 
